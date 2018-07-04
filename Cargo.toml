@@ -17,3 +17,11 @@ restson = "0.3.0"
 version = "*"
 default-features = false
 features = ["json"]
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[[bin]]
+name = "client"
+path = "src/client_main.rs"
