@@ -1,3 +1,5 @@
+#![feature(test)]
+
 #[macro_use] extern crate serde_derive;
 
 use std::io;
