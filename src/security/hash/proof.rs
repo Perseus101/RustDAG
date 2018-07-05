@@ -39,6 +39,7 @@ fn nonces_to_bytes(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> [u8;12] {
     bytes
 }
 
+#[cfg(test)]
 #[test]
 fn test_nonces_to_bytes() {
     assert_eq!(nonces_to_bytes(42, 12, 0x04030201), [0, 0, 0, 42, 0, 0, 0, 12, 4, 3, 2, 1]);
