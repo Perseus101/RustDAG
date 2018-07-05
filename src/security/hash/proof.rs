@@ -3,16 +3,9 @@ use security::hash::sha3::{Sha3_512,Digest};
 const MIN_WEIGHT_MAGNITUDE: usize = 2;
 
 pub fn proof_of_work(trunk_nonce: u32, branch_nonce: u32) -> u32 {
-    let mut nonce = 0;
-    loop {
-        if valid_proof(trunk_nonce, branch_nonce, nonce) {
-            break;
-        }
-
-        nonce += 1;
-    }
-
-    nonce
+    (0u32..)
+        .find(|nonce| valid_proof(trunk_nonce, branch_nonce, *nonce))
+        .expect("No valid proof of work was found")
 }
 
 pub fn valid_proof(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> bool {
@@ -62,9 +55,9 @@ mod tests {
         assert!(valid_proof(0, 1, 29972));
     }
 
-    #[test]
-    fn test_proof_of_work() {
-        assert_eq!(136516, proof_of_work(1, 0));
+    #[bench]
+    fn bench_proof_of_work(b: &mut test::Bencher) {
+        b.iter(|| assert_eq!(136516, proof_of_work(1, 0)));
     }
 
     #[bench]
