@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_add_transaction() {
         let mut dag = BlockDAG::default();
-        let transaction = Transaction::create(TRUNK_HASH.to_string(), BRANCH_HASH.to_string(), vec![], 12645, "1".to_string());
+        let transaction = Transaction::create(TRUNK_HASH.to_string(), BRANCH_HASH.to_string(), vec![], 136516, "1".to_string());
         assert!(dag.add_transaction(transaction.clone()));
 
         {
