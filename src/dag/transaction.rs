@@ -1,12 +1,14 @@
-use dag::sha3::{Sha3_512,Digest};
+use std::hash::{Hash,Hasher};
 
-use util::{bytes_as_string,epoch_time};
+use security::hash::hasher::Sha3Hasher;
+
+use util::epoch_time;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Transaction {
-    branch_transaction: String,
-    trunk_transaction: String,
-    ref_transactions: Vec<String>,
+    branch_transaction: u64,
+    trunk_transaction: u64,
+    ref_transactions: Vec<u64>,
     timestamp: u64,
     nonce: u32,
     transaction_type: u8,
@@ -14,8 +16,8 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(branch_transaction: String, trunk_transaction: String, ref_transactions: Vec<String>,
-               timestamp: u64, nonce: u32, transaction_type: u8, signature: String) -> Transaction {
+    pub fn new(branch_transaction: u64, trunk_transaction: u64, ref_transactions: Vec<u64>,
+               timestamp: u64, nonce: u32, transaction_type: u8) -> Transaction {
         Transaction {
             branch_transaction: branch_transaction,
             trunk_transaction: trunk_transaction,
@@ -23,11 +25,11 @@ impl Transaction {
             timestamp: timestamp,
             nonce: nonce,
             transaction_type: transaction_type,
-            signature: signature,
+            signature: String::from(""),
         }
     }
 
-    pub fn create(branch_transaction: String, trunk_transaction: String, ref_transactions: Vec<String>, nonce: u32, signature: String) -> Transaction {
+    pub fn create(branch_transaction: u64, trunk_transaction: u64, ref_transactions: Vec<u64>, nonce: u32) -> Transaction {
         Transaction {
             branch_transaction: branch_transaction,
             trunk_transaction: trunk_transaction,
@@ -35,19 +37,19 @@ impl Transaction {
             timestamp: epoch_time(),
             nonce: nonce,
             transaction_type: 0,
-            signature: signature,
+            signature: String::from(""),
         }
     }
 
-    pub fn get_trunk_hash(&self) -> String {
-        self.trunk_transaction.to_owned()
+    pub fn get_trunk_hash(&self) -> u64 {
+        self.trunk_transaction
     }
 
-    pub fn get_branch_hash(&self) -> String {
-        self.branch_transaction.to_owned()
+    pub fn get_branch_hash(&self) -> u64 {
+        self.branch_transaction
     }
 
-    pub fn get_ref_hashes(&self) -> Vec<String> {
+    pub fn get_ref_hashes(&self) -> Vec<u64> {
         self.ref_transactions.clone()
     }
 
@@ -55,7 +57,7 @@ impl Transaction {
         self.nonce
     }
 
-    pub fn get_all_refs(&self) -> Vec<String> {
+    pub fn get_all_refs(&self) -> Vec<u64> {
         let mut refs = self.get_ref_hashes();
         refs.push(self.get_branch_hash());
         refs.push(self.get_trunk_hash());
@@ -63,17 +65,22 @@ impl Transaction {
         refs
     }
 
-    pub fn get_hash(&self) -> String {
-        let mut value = self.signature.to_owned();
-        value.push_str(&self.branch_transaction);
-        value.push_str(&self.trunk_transaction);
-        value.push_str(&self.ref_transactions.join(""));
-        value.push_str(&self.timestamp.to_string());
-        let mut hasher = Sha3_512::new();
-        hasher.input(value.as_bytes());
-        let hash = hasher.result();
+    pub fn get_hash(&self) -> u64 {
+        let mut s = Sha3Hasher::new();
+        self.hash(&mut s);
+        s.finish()
+    }
+}
 
-        bytes_as_string(&hash.as_slice())
+impl Hash for Transaction {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.branch_transaction.hash(state);
+        self.trunk_transaction.hash(state);
+        self.ref_transactions.hash(state);
+        self.timestamp.hash(state);
+        self.nonce.hash(state);
+        self.transaction_type.hash(state);
+        self.signature.hash(state);
     }
 }
 
@@ -83,34 +90,29 @@ mod tests {
 
     #[test]
     fn test_new_transaction() {
-        let branch_hash = String::from("0");
-        let trunk_hash = String::from("1");
-        let ref_hash = String::from("2");
-        let signature = String::from("3");
+        let branch_hash = 0;
+        let trunk_hash = 1;
+        let ref_hash = 2;
 
-        let transaction = Transaction::new(branch_hash.clone(),
-            trunk_hash.clone(), vec![ref_hash.clone()],
-            0, 0, 0, signature.clone());
+        let transaction = Transaction::new(branch_hash,
+            trunk_hash, vec![ref_hash], 0, 0, 0);
 
         assert_eq!(transaction.get_branch_hash(), branch_hash);
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
         assert_eq!(vec![ref_hash, branch_hash, trunk_hash],
             transaction.get_all_refs());
         assert_eq!(0, transaction.get_nonce());
-        assert_eq!("72DBDDB94C62BBAF51DEFF730A1ACC60E0081899392E0DB80ED762E8EF91E573C61057A5A238F14C57331835A9439AAE871DADA4FBBA9D4F16AB40773B9BFC4A",
-            transaction.get_hash());
+        assert_eq!(15088500869469674164, transaction.get_hash());
     }
 
     #[test]
     fn test_create_transaction() {
-        let branch_hash = String::from("0");
-        let trunk_hash = String::from("1");
-        let ref_hash = String::from("2");
-        let signature = String::from("3");
+        let branch_hash = 0;
+        let trunk_hash = 1;
+        let ref_hash = 2;
 
         let transaction = Transaction::create(branch_hash.clone(),
-            trunk_hash.clone(), vec![ref_hash.clone()],
-            0, signature.clone());
+            trunk_hash.clone(), vec![ref_hash.clone()], 0);
 
         assert_eq!(transaction.get_branch_hash(), branch_hash);
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
