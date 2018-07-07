@@ -2,11 +2,9 @@ use std::sync::RwLock;
 
 use dag::blockdag::BlockDAG;
 use dag::transaction::Transaction;
-
-use server::peermanager::PeerManager;
-use server::peer::Peer;
-
-use client::types::TransactionHashes;
+use peermanager::PeerManager;
+use util::peer::Peer;
+use util::types::TransactionHashes;
 
 pub struct DAGManager {
     dag: RwLock<BlockDAG>,

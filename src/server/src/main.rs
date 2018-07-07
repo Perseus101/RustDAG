@@ -1,26 +1,21 @@
-#![feature(test, plugin)]
+#![feature(plugin)]
 #![plugin(rocket_codegen)]
 
 extern crate rocket;
 extern crate rocket_contrib;
 
-#[macro_use] extern crate serde_derive;
-
 use rocket::State;
 use rocket_contrib::Json;
 
-mod util;
-mod security;
-mod dag;
-mod server;
-mod client;
+extern crate rustdag_lib;
 
-use dag::transaction::Transaction;
+use rustdag_lib::util::{self, peer::Peer, types::{TransactionHashes,ProcessStatus}};
+use rustdag_lib::dag::{self, transaction::Transaction};
 
-use server::dagmanager::DAGManager;
-use server::peer::Peer;
+mod dagmanager;
+mod peermanager;
 
-use client::types::{TransactionHashes,ProcessStatus};
+use dagmanager::DAGManager;
 
 #[get("/tips/all")]
 fn get_tips(dag: State<DAGManager>) -> Json<Vec<Transaction>> {

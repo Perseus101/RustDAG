@@ -2,7 +2,7 @@ extern crate restson;
 use self::restson::{RestClient,RestPath,Error};
 
 use dag::transaction::Transaction;
-use client::types::{TransactionHashes,ProcessStatus};
+use util::types::{TransactionHashes,ProcessStatus};
 
 impl RestPath<()> for TransactionHashes {
     fn get_path(_: ()) -> Result<String,Error> { Ok(String::from("tips")) }
