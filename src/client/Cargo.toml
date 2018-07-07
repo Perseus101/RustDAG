@@ -5,7 +5,3 @@ authors = ["Colin Moore <colin@moore.one>"]
 
 [dependencies.rustdag-lib]
 path = "../lib"
-
-[[bin]]
-name = "client"
-path = "src/main.rs"

@@ -14,7 +14,3 @@ features = ["json"]
 
 [dependencies.rustdag-lib]
 path = "../lib"
-
-[[bin]]
-name = "server"
-path = "src/main.rs"
