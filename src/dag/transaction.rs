@@ -1,8 +1,10 @@
 use std::hash::{Hash,Hasher};
 
 use security::hash::hasher::Sha3Hasher;
+use security::keys::{PrivateKey,PublicKey,LamportSignatureData};
+use security::ring::digest::SHA512_256;
 
-use util::epoch_time;
+use util::{bytes_as_string,epoch_time};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Transaction {
@@ -12,7 +14,8 @@ pub struct Transaction {
     timestamp: u64,
     nonce: u32,
     transaction_type: u8,
-    signature: String,
+    address: Vec<u8>,
+    signature: LamportSignatureData,
 }
 
 impl Transaction {
@@ -25,7 +28,8 @@ impl Transaction {
             timestamp: timestamp,
             nonce: nonce,
             transaction_type: transaction_type,
-            signature: String::from(""),
+            address: Vec::new(),
+            signature: vec![vec![0; 32]; 256],
         }
     }
 
@@ -37,7 +41,8 @@ impl Transaction {
             timestamp: epoch_time(),
             nonce: nonce,
             transaction_type: 0,
-            signature: String::from(""),
+            address: Vec::new(),
+            signature: vec![vec![0; 32]; 256],
         }
     }
 
@@ -70,6 +75,34 @@ impl Transaction {
         self.hash(&mut s);
         s.finish()
     }
+
+    pub fn sign(&mut self, key: &mut PrivateKey) {
+        let mut s = Sha3Hasher::new();
+        self.hash(&mut s);
+        let bytes = &s.finish_bytes();
+        if let Ok(signature) = key.sign(bytes) {
+            // The signature is composed of 256 fragments, which are each arrays of 32 bytes
+            // for (sig_frag, i) in signature.iter().zip(0..) {
+            //     self.signature[i*32..(i+1)*32].copy_from_slice(sig_frag);
+            // }
+            self.signature = signature;
+            self.address = key.public_key().to_bytes()
+        }
+    }
+
+    pub fn verify(&self) -> bool {
+        if let Some(key) = PublicKey::from_vec(self.address.clone(), &SHA512_256) {
+            let mut s = Sha3Hasher::new();
+            self.hash(&mut s);
+            let bytes = &s.finish_bytes();
+            let mut signature = vec![vec![0; 32]; 256];
+            // for i in 0..256 {
+            //     signature[i].copy_from_slice(&self.signature[i..i+32]);
+            // }
+            return key.verify_signature(&self.signature, bytes);
+        }
+        false
+    }
 }
 
 impl Hash for Transaction {
@@ -80,7 +113,6 @@ impl Hash for Transaction {
         self.timestamp.hash(state);
         self.nonce.hash(state);
         self.transaction_type.hash(state);
-        self.signature.hash(state);
     }
 }
 
@@ -102,7 +134,7 @@ mod tests {
         assert_eq!(vec![ref_hash, branch_hash, trunk_hash],
             transaction.get_all_refs());
         assert_eq!(0, transaction.get_nonce());
-        assert_eq!(15088500869469674164, transaction.get_hash());
+        assert_eq!(5884700003931448933, transaction.get_hash());
     }
 
     #[test]
@@ -119,5 +151,13 @@ mod tests {
         assert_eq!(vec![ref_hash, branch_hash, trunk_hash],
             transaction.get_all_refs());
         assert_eq!(0, transaction.get_nonce());
+    }
+
+    #[test]
+    fn test_sign_and_verify_transaction() {
+        let mut key = PrivateKey::new(&SHA512_256);
+        let mut transaction = Transaction::create(0, 0, vec![], 0);
+        transaction.sign(&mut key);
+        assert!(transaction.verify());
     }
 }

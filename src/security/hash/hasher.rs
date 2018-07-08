@@ -31,6 +31,10 @@ impl Sha3Hasher {
             hasher: Sha3_512::new(),
         }
     }
+
+    pub fn finish_bytes(&self) -> Vec<u8> {
+        self.hasher.clone().result().to_vec()
+    }
 }
 
 fn _bytes_to_u64(bytes: &[u8]) -> u64 {

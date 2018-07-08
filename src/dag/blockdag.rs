@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use dag::transaction::Transaction;
 
 use security::hash::proof::{proof_of_work,valid_proof};
+use security::keys::{PublicKey,LamportSignatureData};
 
 const BASE_TRUNK_HASH: u64 = 0;
 const BASE_BRANCH_HASH: u64 = 1;
@@ -41,7 +42,7 @@ impl BlockDAG {
     /// is invalid, or because one of the referenced transactions does not
     /// exist, the function will return false
     pub fn add_transaction(&mut self, transaction: Transaction) -> bool {
-        let mut referenced = Vec::new();
+        let mut referenced = Vec::with_capacity(2);
         if let Some(trunk) = self.get_transaction(transaction.get_trunk_hash()) {
             if let Some(branch) = self.get_transaction(transaction.get_branch_hash()) {
                 if !valid_proof(trunk.get_nonce(), branch.get_nonce(), transaction.get_nonce()) {
@@ -53,6 +54,9 @@ impl BlockDAG {
             else { return false; }
         }
         else { return false; }
+
+        // Verify the transaction's signature
+        if !transaction.verify() { return false; }
 
         for hash in transaction.get_ref_hashes() {
             if let Some(t) = self.get_transaction(hash) {
@@ -79,30 +83,6 @@ impl BlockDAG {
         )
     }
 
-    /// Create a new transaction
-    ///
-    /// Create a new transaction that references the transactions specified by
-    /// trunk_hash and branch_hash
-    pub fn create_transaction(&mut self, trunk_hash: u64, branch_hash: u64) -> Option<Transaction> {
-        let mut nonce = None;
-        if let Some(trunk) = self.get_transaction(trunk_hash) {
-            if let Some(branch) = self.get_transaction(branch_hash) {
-                let trunk_nonce = trunk.get_nonce();
-                let branch_nonce = branch.get_nonce();
-                nonce = Some(proof_of_work(trunk_nonce, branch_nonce));
-            }
-        }
-
-        match nonce {
-            Some(nonce) => {
-                let transaction = Transaction::create(branch_hash, trunk_hash, vec![], nonce);
-                self.add_transaction(transaction.clone());
-                Some(transaction)
-            }
-            None => None
-        }
-    }
-
     /// Get tips of the dag
     ///
     /// This function returns all tips of the dag.
@@ -118,10 +98,13 @@ mod tests {
     use super::*;
     use dag::transaction::Transaction;
 
+    use security::keys::PrivateKey;
+    use security::ring::digest::SHA512_256;
+
     // Hardcoded values for the hashes of the genesis transactions.
     // If the default genesis transactions change, these values must be updated.
-    const TRUNK_HASH: u64 = 13667644768295383873;
-    const BRANCH_HASH: u64 = 9362917039174455912;
+    const TRUNK_HASH: u64 = 18035271841456622039;
+    const BRANCH_HASH: u64 = 475765571055499685;
 
     #[test]
     fn test_genesis_transactions() {
@@ -139,7 +122,10 @@ mod tests {
     #[test]
     fn test_add_transaction() {
         let mut dag = BlockDAG::default();
-        let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], 136516);
+        let mut key = PrivateKey::new(&SHA512_256);
+        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], 136516);
+        transaction.sign(&mut key);
+        assert!(transaction.verify());
         assert!(dag.add_transaction(transaction.clone()));
 
         {
@@ -150,20 +136,5 @@ mod tests {
 
         let bad_transaction = Transaction::create(10, BRANCH_HASH, vec![], 0);
         assert!(!dag.add_transaction(bad_transaction));
-    }
-
-    #[test]
-    fn test_create_transaction() {
-        let mut dag = BlockDAG::default();
-
-        let transaction = dag.create_transaction(BRANCH_HASH, TRUNK_HASH).unwrap();
-        {
-            let tips = dag.get_tips();
-            assert_eq!(tips.len(), 1);
-            assert_eq!(*tips[0], transaction);
-        }
-        assert_eq!(None, dag.create_transaction(TRUNK_HASH, 10));
-        assert_eq!(None, dag.create_transaction(10, BRANCH_HASH));
-        assert_eq!(None, dag.create_transaction(10, 10));
     }
 }

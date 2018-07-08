@@ -15,7 +15,7 @@ impl TransactionHashes {
 }
 
 /// Stores the success or failure of a remote process
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ProcessStatus {
     status: bool,
 }
