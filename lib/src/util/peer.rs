@@ -2,14 +2,14 @@ extern crate restson;
 use self::restson::{RestClient,RestPath,Error};
 
 use dag::transaction::Transaction;
-use client::types::{TransactionHashes,ProcessStatus};
+use util::types::{TransactionHashes,ProcessStatus};
 
 impl RestPath<()> for TransactionHashes {
     fn get_path(_: ()) -> Result<String,Error> { Ok(String::from("tips")) }
 }
 
 enum TransactionRequest {
-    GET(String),
+    GET(u64),
     POST()
 }
 
@@ -34,7 +34,7 @@ impl Peer {
         }
     }
 
-    pub fn get_transaction(&self, hash: String) -> Option<Transaction> {
+    pub fn get_transaction(&self, hash: u64) -> Option<Transaction> {
         let mut client = RestClient::new(&self.client_url).unwrap();
         client.get(TransactionRequest::GET(hash)).ok()
     }

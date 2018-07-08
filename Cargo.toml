@@ -1,27 +1,6 @@
-[package]
-name = "rustdag"
-version = "0.1.0"
-authors = ["Colin Moore <colin@moore.one>"]
-
-[dependencies]
-sha3 = "0.7.3"
-rocket = "0.3.6"
-rocket_codegen = "0.3.6"
-serde = "1.0"
-serde_json = "1.0"
-serde_derive = "1.0"
-bincode = "1.0"
-restson = "0.3.0"
-
-[dependencies.rocket_contrib]
-version = "*"
-default-features = false
-features = ["json"]
-
-[[bin]]
-name = "server"
-path = "src/main.rs"
-
-[[bin]]
-name = "client"
-path = "src/client_main.rs"
+[workspace]
+members = [
+  "lib",
+  "client",
+  "server"
+]
