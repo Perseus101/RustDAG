@@ -4,7 +4,7 @@ use security::hash::hasher::Sha3Hasher;
 use security::keys::{PrivateKey,PublicKey,LamportSignatureData};
 use security::ring::digest::SHA512_256;
 
-use util::{bytes_as_string,epoch_time};
+use util::epoch_time;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Transaction {
@@ -15,7 +15,7 @@ pub struct Transaction {
     nonce: u32,
     transaction_type: u8,
     address: Vec<u8>,
-    signature: LamportSignatureData,
+    signature: Vec<u8>,
 }
 
 impl Transaction {
@@ -29,7 +29,7 @@ impl Transaction {
             nonce: nonce,
             transaction_type: transaction_type,
             address: Vec::new(),
-            signature: vec![vec![0; 32]; 256],
+            signature: vec![0; 8192],
         }
     }
 
@@ -42,7 +42,7 @@ impl Transaction {
             nonce: nonce,
             transaction_type: 0,
             address: Vec::new(),
-            signature: vec![vec![0; 32]; 256],
+            signature: vec![0; 8192],
         }
     }
 
@@ -82,10 +82,9 @@ impl Transaction {
         let bytes = &s.finish_bytes();
         if let Ok(signature) = key.sign(bytes) {
             // The signature is composed of 256 fragments, which are each arrays of 32 bytes
-            // for (sig_frag, i) in signature.iter().zip(0..) {
-            //     self.signature[i*32..(i+1)*32].copy_from_slice(sig_frag);
-            // }
-            self.signature = signature;
+            for (sig_frag, i) in signature.iter().zip(0..) {
+                self.signature[i*32..(i+1)*32].copy_from_slice(sig_frag);
+            }
             self.address = key.public_key().to_bytes()
         }
     }
@@ -96,10 +95,10 @@ impl Transaction {
             self.hash(&mut s);
             let bytes = &s.finish_bytes();
             let mut signature = vec![vec![0; 32]; 256];
-            // for i in 0..256 {
-            //     signature[i].copy_from_slice(&self.signature[i..i+32]);
-            // }
-            return key.verify_signature(&self.signature, bytes);
+            for i in 0..256 {
+                signature[i].copy_from_slice(&self.signature[i*32..(i+1)*32]);
+            }
+            return key.verify_signature(&signature, bytes);
         }
         false
     }

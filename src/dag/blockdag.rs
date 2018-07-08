@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use dag::transaction::Transaction;
 
-use security::hash::proof::{proof_of_work,valid_proof};
-use security::keys::{PublicKey,LamportSignatureData};
+use security::hash::proof::valid_proof;
 
 const BASE_TRUNK_HASH: u64 = 0;
 const BASE_BRANCH_HASH: u64 = 1;

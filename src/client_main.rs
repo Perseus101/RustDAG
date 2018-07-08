@@ -36,7 +36,6 @@ fn main() {
             );
 
             transaction.sign(&mut pk);
-            println!("{:?}", transaction.verify());
             let mut signature = String::new();
 
             io::stdin().read_line(&mut signature).expect("Failed to read line");
