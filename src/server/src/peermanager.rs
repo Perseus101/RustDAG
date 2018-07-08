@@ -1,4 +1,4 @@
-use server::peer::Peer;
+use util::peer::Peer;
 
 pub struct PeerManager {
     pub peers: Vec<Peer>

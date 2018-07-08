@@ -1,22 +1,13 @@
-#![feature(test)]
-
-#[macro_use] extern crate serde_derive;
-
 use security::ring::digest::SHA512_256;
 
 use std::io;
 
-mod util;
-mod security;
-mod dag;
+extern crate rustdag_lib;
 
-#[allow(dead_code)]
-mod server;
-mod client;
+use rustdag_lib::{util, security, dag};
 
 use dag::transaction::Transaction;
-use server::peer::Peer;
-
+use util::peer::Peer;
 use security::hash::proof::proof_of_work;
 use security::keys::PrivateKey;
 

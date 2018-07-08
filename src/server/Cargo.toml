@@ -1,0 +1,16 @@
+[package]
+name = "rustdag-server"
+version = "0.1.0"
+authors = ["Colin Moore <colin@moore.one>"]
+
+[dependencies]
+rocket = "0.3.6"
+rocket_codegen = "0.3.6"
+
+[dependencies.rocket_contrib]
+version = "*"
+default-features = false
+features = ["json"]
+
+[dependencies.rustdag-lib]
+path = "../lib"

@@ -727,20 +727,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustdag"
+name = "rustdag-client"
+version = "0.1.0"
+dependencies = [
+ "rustdag-lib 0.1.0",
+]
+
+[[package]]
+name = "rustdag-lib"
 version = "0.1.0"
 dependencies = [
  "bincode 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lamport_sigs 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "restson 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ring 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rocket 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "rocket_codegen 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "rocket_contrib 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "sha3 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rustdag-server"
+version = "0.1.0"
+dependencies = [
+ "rocket 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rocket_codegen 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rocket_contrib 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustdag-lib 0.1.0",
 ]
 
 [[package]]
