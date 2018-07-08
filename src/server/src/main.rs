@@ -28,7 +28,7 @@ fn select_tips(dag: State<DAGManager>) -> Json<TransactionHashes> {
 }
 
 #[get("/transaction/get/<hash>")]
-fn get_transaction(hash: String, dag: State<DAGManager>) -> Option<Json<Transaction>> {
+fn get_transaction(hash: u64, dag: State<DAGManager>) -> Option<Json<Transaction>> {
     dag.inner().get_transaction(hash).and_then(|x| Some(Json(x)))
 }
 
