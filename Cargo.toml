@@ -1,6 +1,6 @@
 [workspace]
 members = [
-  "src/lib",
-  "src/client",
-  "src/server"
+  "lib",
+  "client",
+  "server"
 ]

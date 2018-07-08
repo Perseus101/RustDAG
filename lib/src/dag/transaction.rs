@@ -1,7 +1,7 @@
 use std::hash::{Hash,Hasher};
 
 use security::hash::hasher::Sha3Hasher;
-use security::keys::{PrivateKey,PublicKey,LamportSignatureData};
+use security::keys::{PrivateKey,PublicKey};
 use security::ring::digest::SHA512_256;
 
 use util::epoch_time;
