@@ -21,14 +21,8 @@ impl Default for DAGManager {
 }
 
 impl DAGManager {
-    pub fn get_tips(&self) -> Vec<Transaction> {
+    pub fn get_tips(&self) -> TransactionHashes {
         self.dag.read().unwrap().get_tips()
-            .iter().map(|transaction| (*transaction).clone()).collect()
-    }
-
-    pub fn select_tips(&self) -> TransactionHashes {
-        let transactions = self.get_tips();
-        TransactionHashes::new(transactions[0].get_hash(), transactions[1].get_hash())
     }
 
     pub fn get_transaction(&self, hash: u64) -> Option<Transaction> {

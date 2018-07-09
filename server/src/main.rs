@@ -17,14 +17,9 @@ mod peermanager;
 
 use dagmanager::DAGManager;
 
-#[get("/tips/all")]
-fn get_tips(dag: State<DAGManager>) -> Json<Vec<Transaction>> {
-    Json(dag.inner().get_tips())
-}
-
 #[get("/tips")]
-fn select_tips(dag: State<DAGManager>) -> Json<TransactionHashes> {
-    Json(dag.inner().select_tips())
+fn get_tips(dag: State<DAGManager>) -> Json<TransactionHashes> {
+    Json(dag.inner().get_tips())
 }
 
 #[get("/transaction/get/<hash>")]
@@ -44,7 +39,7 @@ fn new_peer(peer: Json<Peer>, chain: State<DAGManager>) {
 
 fn main() {
     rocket::ignite()
-        .mount("/", routes![select_tips, get_tips, get_transaction, add_transaction, new_peer])
+        .mount("/", routes![get_tips, get_transaction, add_transaction, new_peer])
         .manage(DAGManager::default())
         .launch();
 }
