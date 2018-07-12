@@ -1,5 +1,5 @@
 /// Stores the hashes returned from tip selection
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionHashes {
     pub trunk_hash: u64,
     pub branch_hash: u64,
@@ -14,16 +14,11 @@ impl TransactionHashes {
     }
 }
 
-/// Stores the success or failure of a remote process
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ProcessStatus {
-    status: bool,
-}
-
-impl ProcessStatus {
-    pub fn new(status: bool) -> ProcessStatus {
-        ProcessStatus {
-            status: status,
-        }
-    }
+/// Stores the status of adding a transaction
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub enum TransactionStatus {
+    Accepted,
+    Rejected,
+    Pending,
+    Milestone
 }

@@ -9,7 +9,7 @@ use rocket_contrib::Json;
 
 extern crate rustdag_lib;
 
-use rustdag_lib::util::{self, peer::Peer, types::{TransactionHashes,ProcessStatus}};
+use rustdag_lib::util::{self, peer::Peer, types::{TransactionHashes,TransactionStatus}};
 use rustdag_lib::dag::{self, transaction::Transaction};
 
 mod dagmanager;
@@ -28,8 +28,8 @@ fn get_transaction(hash: u64, dag: State<DAGManager>) -> Option<Json<Transaction
 }
 
 #[post("/transaction", data = "<transaction>")]
-fn add_transaction(transaction: Json<Transaction>, dag: State<DAGManager>) -> Json<ProcessStatus> {
-    Json(ProcessStatus::new(dag.inner().add_transaction(transaction.into_inner())))
+fn add_transaction(transaction: Json<Transaction>, dag: State<DAGManager>) -> Json<TransactionStatus> {
+    Json(dag.inner().add_transaction(transaction.into_inner()))
 }
 
 #[post("/peer/register", data = "<peer>")]
