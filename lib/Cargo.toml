@@ -15,4 +15,3 @@ lamport_sigs = "0.4.1"
 
 [lib]
 name = "rustdag_lib"
-crate-type = ["dylib"]

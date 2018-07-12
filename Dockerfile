@@ -5,6 +5,8 @@ WORKDIR /usr/src/server
 
 COPY . .
 
-RUN cargo install
+RUN cargo update
 
-CMD ["rustchain"]
+RUN cargo install --path server
+
+CMD ["rustdag-server"]
