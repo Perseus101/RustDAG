@@ -115,6 +115,10 @@ impl BlockDAG {
         }
     }
 
+    /// Walk backwards from transaction, searching for a transaction specified
+    /// by hash. Stops at any transaction that occurred before timestamp
+    ///
+    /// If the transaction is found, returns true
     fn walk_search(&self, transaction: &Transaction, hash: u64, timestamp: u64) -> bool {
         if transaction.get_timestamp() < timestamp {
             return false;
@@ -132,6 +136,8 @@ impl BlockDAG {
         false
     }
 
+    /// Move all transactions referenced by transaction from
+    /// pending_transactions to transactions
     fn confirm_transactions(&mut self, transaction: &Transaction) {
         for transaction_hash in transaction.get_all_refs() {
             if let Some(transaction) = self.pending_transactions.remove(&transaction_hash) {
@@ -151,6 +157,7 @@ impl BlockDAG {
         )
     }
 
+    /// Get the confirmation status of a transaction specified by hash
     pub fn get_confirmation_status(&self, hash: u64) -> TransactionStatus {
         if let Some(_) = self.pending_transactions.get(&hash) {
             return TransactionStatus::Pending;

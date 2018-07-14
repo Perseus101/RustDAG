@@ -27,6 +27,11 @@ fn get_transaction(hash: u64, dag: State<DAGManager>) -> Option<Json<Transaction
     dag.inner().get_transaction(hash).and_then(|x| Some(Json(x)))
 }
 
+#[get("/transaction/get/<hash>/status")]
+fn get_transaction_status(hash: u64, dag: State<DAGManager>) -> Json<TransactionStatus> {
+    Json(dag.inner().get_transaction_status(hash))
+}
+
 #[post("/transaction", data = "<transaction>")]
 fn add_transaction(transaction: Json<Transaction>, dag: State<DAGManager>) -> Json<TransactionStatus> {
     Json(dag.inner().add_transaction(transaction.into_inner()))
@@ -39,7 +44,7 @@ fn new_peer(peer: Json<Peer>, chain: State<DAGManager>) {
 
 fn main() {
     rocket::ignite()
-        .mount("/", routes![get_tips, get_transaction, add_transaction, new_peer])
+        .mount("/", routes![get_tips, get_transaction, get_transaction_status, add_transaction, new_peer])
         .manage(DAGManager::default())
         .launch();
 }

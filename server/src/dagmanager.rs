@@ -29,6 +29,10 @@ impl DAGManager {
         self.dag.read().unwrap().get_transaction(hash)
     }
 
+    pub fn get_transaction_status(&self, hash: u64) -> TransactionStatus {
+        self.dag.read().unwrap().get_confirmation_status(hash)
+    }
+
     pub fn add_transaction(&self, transaction: Transaction) -> TransactionStatus {
         let status = self.dag.write().unwrap().add_transaction(&transaction);
         if status != TransactionStatus::Rejected {
