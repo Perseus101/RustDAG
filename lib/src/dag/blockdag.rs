@@ -40,7 +40,7 @@ impl BlockDAG {
     /// If the transaction is not valid, either because the proof of work
     /// is invalid, or because one of the referenced transactions does not
     /// exist, the function will return false
-    pub fn add_transaction(&mut self, transaction: Transaction) -> bool {
+    pub fn add_transaction(&mut self, transaction: &Transaction) -> bool {
         let mut referenced = Vec::with_capacity(2);
         if let Some(trunk) = self.get_transaction(transaction.get_trunk_hash()) {
             if let Some(branch) = self.get_transaction(transaction.get_branch_hash()) {
@@ -68,7 +68,7 @@ impl BlockDAG {
             self.tips.remove(&t.get_hash());
             self.transactions.insert(t.get_hash(), t);
         }
-        self.tips.insert(transaction.get_hash(), transaction);
+        self.tips.insert(transaction.get_hash(), transaction.clone());
         true
     }
 
@@ -125,7 +125,7 @@ mod tests {
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], 136516);
         transaction.sign(&mut key);
         assert!(transaction.verify());
-        assert!(dag.add_transaction(transaction.clone()));
+        assert!(dag.add_transaction(&transaction));
 
         {
             let tips = dag.get_tips();
@@ -134,6 +134,6 @@ mod tests {
         }
 
         let bad_transaction = Transaction::create(10, BRANCH_HASH, vec![], 0);
-        assert!(!dag.add_transaction(bad_transaction));
+        assert!(!dag.add_transaction(&bad_transaction));
     }
 }

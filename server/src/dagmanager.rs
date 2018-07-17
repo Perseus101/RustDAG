@@ -36,7 +36,19 @@ impl DAGManager {
     }
 
     pub fn add_transaction(&self, transaction: Transaction) -> bool {
-        self.dag.write().unwrap().add_transaction(transaction)
+        // Ignore any already known transactions
+        if self.dag.read().unwrap().get_transaction(transaction.get_hash()) != None {
+            return false;
+        }
+        if self.dag.write().unwrap().add_transaction(&transaction) {
+            self.peers.read().unwrap().map_peers(|peer| {
+                peer.post_transaction(&transaction)
+            });
+            true
+        }
+        else {
+            false
+        }
     }
 
     // Peer functions
