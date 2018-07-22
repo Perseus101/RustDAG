@@ -34,6 +34,15 @@ impl DAGManager {
     }
 
     pub fn add_transaction(&self, transaction: Transaction) -> TransactionStatus {
+        {
+            // Ignore any already known transactions
+            let current_status = self.dag.read().unwrap()
+                .get_confirmation_status(transaction.get_hash());
+            if current_status != TransactionStatus::Rejected {
+                return current_status;
+            }
+        }
+
         let status = self.dag.write().unwrap().add_transaction(&transaction);
         if status != TransactionStatus::Rejected {
             self.peers.read().unwrap().map_peers(|peer| {

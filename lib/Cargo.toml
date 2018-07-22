@@ -16,4 +16,3 @@ rand = "0.5.3"
 
 [lib]
 name = "rustdag_lib"
-crate-type = ["dylib"]
