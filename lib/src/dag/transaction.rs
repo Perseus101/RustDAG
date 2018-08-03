@@ -70,6 +70,10 @@ impl Transaction {
         refs
     }
 
+    pub fn get_timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
     pub fn get_hash(&self) -> u64 {
         let mut s = Sha3Hasher::new();
         self.hash(&mut s);
