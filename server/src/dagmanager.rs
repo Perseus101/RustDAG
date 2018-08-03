@@ -4,7 +4,7 @@ use dag::blockdag::BlockDAG;
 use dag::transaction::Transaction;
 use peermanager::PeerManager;
 use util::peer::Peer;
-use util::types::TransactionHashes;
+use util::types::{TransactionHashes,TransactionStatus};
 
 pub struct DAGManager {
     dag: RwLock<BlockDAG>,
@@ -21,33 +21,37 @@ impl Default for DAGManager {
 }
 
 impl DAGManager {
-    pub fn get_tips(&self) -> Vec<Transaction> {
+    pub fn get_tips(&self) -> TransactionHashes {
         self.dag.read().unwrap().get_tips()
-            .iter().map(|transaction| (*transaction).clone()).collect()
-    }
-
-    pub fn select_tips(&self) -> TransactionHashes {
-        let transactions = self.get_tips();
-        TransactionHashes::new(transactions[0].get_hash(), transactions[1].get_hash())
     }
 
     pub fn get_transaction(&self, hash: u64) -> Option<Transaction> {
         self.dag.read().unwrap().get_transaction(hash)
     }
 
-    pub fn add_transaction(&self, transaction: Transaction) -> bool {
-        // Ignore any already known transactions
-        if self.dag.read().unwrap().get_transaction(transaction.get_hash()) != None {
-            return false;
+    pub fn get_transaction_status(&self, hash: u64) -> TransactionStatus {
+        self.dag.read().unwrap().get_confirmation_status(hash)
+    }
+
+    pub fn add_transaction(&self, transaction: Transaction) -> TransactionStatus {
+        {
+            // Ignore any already known transactions
+            let current_status = self.dag.read().unwrap()
+                .get_confirmation_status(transaction.get_hash());
+            if current_status != TransactionStatus::Rejected {
+                return current_status;
+            }
         }
-        if self.dag.write().unwrap().add_transaction(&transaction) {
+
+        let status = self.dag.write().unwrap().add_transaction(&transaction);
+        if status != TransactionStatus::Rejected {
             self.peers.read().unwrap().map_peers(|peer| {
                 peer.post_transaction(&transaction)
             });
-            true
+            status
         }
         else {
-            false
+            TransactionStatus::Rejected
         }
     }
 
