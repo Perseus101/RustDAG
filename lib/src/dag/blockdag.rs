@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rand::{Rng,thread_rng};
 
-use dag::transaction::Transaction;
+use dag::transaction::{Transaction, data::TransactionData};
 use dag::milestone::Milestone;
 
 use security::hash::proof::valid_proof;
@@ -29,11 +29,13 @@ impl Default for BlockDAG {
             milestones: Vec::new(),
             tips: Vec::new(),
 		};
-        let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH, vec![], 0, 0, 0);
+        let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH,
+            vec![], 0, 0, TransactionData::Genesis);
         let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
 
         let genesis_transaction_hash = genesis_transaction.get_hash();
-        let genesis_branch = Transaction::new(genesis_transaction_hash, genesis_transaction_hash, vec![], 0, 0, 0);
+        let genesis_branch = Transaction::new(genesis_transaction_hash,
+            genesis_transaction_hash, vec![], 0, 0, TransactionData::Genesis);
         let genesis_branch_hash = genesis_branch.get_hash();
 
         dag.transactions.insert(genesis_transaction_hash, genesis_transaction);
@@ -207,8 +209,8 @@ mod tests {
 
     // Hardcoded values for the hashes of the genesis transactions.
     // If the default genesis transactions change, these values must be updated.
-    const TRUNK_HASH: u64 = 9160162714596186031;
-    const BRANCH_HASH: u64 = 6508967370193414217;
+    const TRUNK_HASH: u64 = 18437817136469695293;
+    const BRANCH_HASH: u64 = 6043537212972274484;
 
     const BASE_NONCE: u32 = 18722;
 
@@ -230,18 +232,19 @@ mod tests {
     fn test_add_transaction() {
         let mut dag = BlockDAG::default();
         let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], BASE_NONCE);
+        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
+            vec![], BASE_NONCE, TransactionData::ExecContract(()));
         transaction.sign(&mut key);
         assert!(transaction.verify());
         assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
 
-        {
-            let tips = dag.get_tips();
-            assert_eq!(tips.trunk_hash, transaction.get_hash());
-            assert_eq!(tips.branch_hash, transaction.get_branch_hash());
-        }
+        let tips = dag.get_tips();
+        assert_eq!(tips.trunk_hash, transaction.get_hash());
+        assert_eq!(tips.branch_hash, transaction.get_branch_hash());
+        drop(tips);
 
-        let bad_transaction = Transaction::create(10, BRANCH_HASH, vec![], 0);
+        let bad_transaction = Transaction::create(10, BRANCH_HASH, vec![], 0,
+            TransactionData::ExecContract(()));
         assert_eq!(dag.add_transaction(&bad_transaction), TransactionStatus::Rejected);
     }
 
@@ -250,16 +253,20 @@ mod tests {
         let dag = BlockDAG::default();
         let prev_milestone = dag.milestones[dag.milestones.len() - 1].clone();
 
-        let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], 0);
+        let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![],
+            0, TransactionData::ExecContract(()));
         assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
 
-        let transaction = Transaction::create(TRUNK_HASH, 0, vec![], 0);
+        let transaction = Transaction::create(TRUNK_HASH, 0, vec![], 0,
+            TransactionData::ExecContract(()));
         assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
 
-        let transaction = Transaction::create(0, BRANCH_HASH, vec![], 0);
+        let transaction = Transaction::create(0, BRANCH_HASH, vec![], 0,
+            TransactionData::ExecContract(()));
         assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
 
-        let transaction = Transaction::create(0, 0, vec![], 0);
+        let transaction = Transaction::create(0, 0, vec![], 0,
+            TransactionData::ExecContract(()));
         assert!(!dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
     }
 
@@ -267,7 +274,8 @@ mod tests {
     fn test_add_milestone() {
         let mut dag = BlockDAG::default();
         let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], BASE_NONCE);
+        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
+            vec![], BASE_NONCE, TransactionData::ExecContract(()));
         transaction.sign(&mut key);
         assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
         assert!(dag.add_milestone(transaction));
@@ -281,7 +289,8 @@ mod tests {
         assert_eq!(dag.get_confirmation_status(10), TransactionStatus::Rejected);
 
         let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], BASE_NONCE);
+        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
+            vec![], BASE_NONCE, TransactionData::ExecContract(()));
         transaction.sign(&mut key);
         assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
         assert_eq!(dag.get_confirmation_status(transaction.get_hash()), TransactionStatus::Pending);
