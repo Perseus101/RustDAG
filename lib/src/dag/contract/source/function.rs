@@ -6,6 +6,46 @@ use dag::contract::state::ContractState;
 
 use super::op::ContractOp;
 
+/// A ContractFunction represents the executable code for a single smart
+/// contract function.
+///
+/// # Examples
+///
+/// This function takes one argument and stores the cube of that argument in the
+/// contract's first state variable.
+///
+/// ```
+/// # use rustdag_lib::dag::contract::source::op::ContractOp;
+/// # use rustdag_lib::dag::contract::source::function::ContractFunction;
+/// # use rustdag_lib::dag::contract::state::ContractState;
+/// let func = ContractFunction::new(vec![
+///     ContractOp::Mul((0, 0, 1)),
+///     ContractOp::Mul((0, 1, 2)),
+/// ], 1, 1);
+///
+/// assert_eq!(func.exec(ContractState::new(1), vec![1]).unwrap()[0], 1);
+/// assert_eq!(func.exec(ContractState::new(1), vec![2]).unwrap()[0], 8);
+/// assert_eq!(func.exec(ContractState::new(1), vec![3]).unwrap()[0], 27);
+/// ```
+/// Because we cannot directly cube a number with these operators, it takes two
+/// steps to cube the variable. In order to do this, we take the argument,
+/// square it, store the result in a stack variable, then multiply that stack
+/// variable by the argument and store it in the output. This means we need an
+/// argument space of 1, stack space of 1, and output space of 1. Since
+/// variables are mapped args -> stack -> state, this means position 0 is the
+/// argument, position 1 is the stack variable, and position 2 is the
+/// output variable.
+///
+/// The function's pseudocode looks like this:
+/// ```python
+/// def cube(x):
+///     temp = x * x
+///     return temp * x
+/// ```
+///
+/// The first operator squares the argument and stores it in a stack variable,
+/// and the second multiplies the stack variable by the input, and stores the
+/// value in the output.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Hash, Debug)]
 pub struct ContractFunction {
     ops: Vec<ContractOp>,
@@ -22,6 +62,45 @@ impl ContractFunction {
         }
     }
 
+
+    /// Execute the function with args and state
+    ///
+    /// # Errors
+    ///
+    /// * ArgLenMismatchError if the number of arguments is incorrect for the
+    /// specified function
+    ///
+    /// # Examples
+    /// ```
+    /// # use rustdag_lib::dag::contract::source::ContractSource;
+    /// # use rustdag_lib::dag::contract::source::op::ContractOp;
+    /// # use rustdag_lib::dag::contract::source::function::ContractFunction;
+    /// # use rustdag_lib::dag::contract::state::ContractState;
+    /// # use rustdag_lib::dag::contract::Contract;
+    /// let src = ContractSource::new(vec![
+    ///     ContractFunction::new(vec![ContractOp::Add((0, 1, 1))], 1, 0),
+    ///     ContractFunction::new(vec![ContractOp::AddConst((1, 0, 0))], 0, 0),
+    ///     ContractFunction::new(vec![ContractOp::Mul((0, 1, 1))], 1, 0),
+    ///     ContractFunction::new(vec![ContractOp::MulConst((2, 0, 0))], 0, 0)
+    /// ]);
+    /// let mut contract = Contract::new(src, ContractState::new(1));
+    ///
+    /// // Add 3 to the state, i.e. 0 + 3 = 3
+    /// contract.exec(0, vec![3]);
+    /// assert_eq!(contract.get_state()[0], 3);
+    ///
+    /// // Add constant 1 to the state, i.e. 3 + 1 = 4
+    /// contract.exec(1, vec![]);
+    /// assert_eq!(contract.get_state()[0], 4);
+    ///
+    /// // Multiply the state by 3, i.e. 4 * 3 = 12
+    /// contract.exec(2, vec![3]);
+    /// assert_eq!(contract.get_state()[0], 12);
+    ///
+    /// // Multiply the state by constant 2, i.e. 12 * 2 = 24
+    /// contract.exec(3, vec![]);
+    /// assert_eq!(contract.get_state()[0], 24);
+    /// ```
     pub fn exec(&self, state: ContractState, args: Vec<u8>)
         -> Result<ContractState, ArgLenMismatchError> {
         if args.len() != self.argc {
