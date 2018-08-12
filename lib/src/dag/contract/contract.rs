@@ -2,6 +2,8 @@ use std::error::Error;
 
 use super::source::ContractSource;
 use super::state::ContractState;
+use super::result::ContractResult;
+use super::errors::{ArgLenMismatchError, ExecutionError};
 
 /// Encapsulates logic and state of a smart contract
 ///
@@ -14,6 +16,15 @@ use super::state::ContractState;
 pub struct Contract {
     src: ContractSource,
     state: ContractState
+}
+
+impl From<ContractSource> for Contract {
+    fn from(src: ContractSource) -> Self {
+        Contract {
+            state: ContractState::new(src.get_state_size()),
+            src: src
+        }
+    }
 }
 
 impl Contract {
@@ -43,28 +54,61 @@ impl Contract {
     ///     ContractFunction::new(vec![ContractOp::AddConst((1, 0, 0))], 0, 0),
     ///     ContractFunction::new(vec![ContractOp::Mul((0, 1, 1))], 1, 0),
     ///     ContractFunction::new(vec![ContractOp::MulConst((2, 0, 0))], 0, 0)
-    /// ]);
-    /// let mut contract = Contract::new(src, ContractState::new(1));
+    /// ], 1);
+    /// let mut contract: Contract = From::from(src);
     ///
     /// // Add 3 to the state, i.e. 0 + 3 = 3
-    /// contract.exec(0, vec![3]);
+    /// let res = contract.exec(0, vec![3]);
+    /// contract.apply(res.unwrap());
     /// assert_eq!(contract.get_state()[0], 3);
     ///
     /// // Add constant 1 to the state, i.e. 3 + 1 = 4
-    /// contract.exec(1, vec![]);
+    /// let res = contract.exec(1, vec![]);
+    /// contract.apply(res.unwrap());
     /// assert_eq!(contract.get_state()[0], 4);
     ///
     /// // Multiply the state by 3, i.e. 4 * 3 = 12
-    /// contract.exec(2, vec![3]);
+    /// let res = contract.exec(2, vec![3]);
+    /// contract.apply(res.unwrap());
     /// assert_eq!(contract.get_state()[0], 12);
     ///
     /// // Multiply the state by constant 2, i.e. 12 * 2 = 24
-    /// contract.exec(3, vec![]);
+    /// let res = contract.exec(3, vec![]);
+    /// contract.apply(res.unwrap());
     /// assert_eq!(contract.get_state()[0], 24);
     /// ```
-    pub fn exec(&mut self, fn_idx: usize, args: Vec<u8>)
+    pub fn exec(&self, fn_idx: usize, args: Vec<u8>)
+            -> Result<ContractResult, Box<Error>> {
+        let result = self.src.get_function(fn_idx)
+            .exec(&self.state, &args)?;
+
+        Ok(ContractResult::new(
+            fn_idx,
+            args,
+            result
+        ))
+    }
+
+    /// Apply a ContractResult to the state of the contract
+    ///
+    /// # Errors
+    ///
+    /// * ArgLenMismatchError if the number of arguments is incorrect for the
+    /// specified function
+    pub fn apply(&mut self, result: ContractResult)
             -> Result<(), Box<Error>> {
-        self.state = self.src.get_function(fn_idx).exec(self.state.clone(), args)?;
+        let func = self.src.get_function(result.get_fn_idx());
+        if func.get_argc() != result.get_argc() {
+            return Err(From::from(ArgLenMismatchError));
+        }
+
+        if !func.verify(&self.state, &result) {
+            return Err(From::from(ExecutionError))
+        }
+
+        self.state.as_mut_slice().copy_from_slice(
+            &result.get_result()[(func.get_argc() + func.get_stack_size())..]
+        );
         Ok(())
     }
 

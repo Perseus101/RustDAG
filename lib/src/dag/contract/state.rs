@@ -11,6 +11,18 @@ impl ContractState {
             raw: vec![0; capacity],
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.raw.len()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.raw
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        &mut self.raw
+    }
 }
 
 impl Index<usize> for ContractState {

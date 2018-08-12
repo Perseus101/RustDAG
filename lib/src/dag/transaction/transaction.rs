@@ -13,6 +13,7 @@ pub struct Transaction {
     branch_transaction: u64,
     trunk_transaction: u64,
     ref_transactions: Vec<u64>,
+    contract: u64,
     timestamp: u64,
     nonce: u32,
     address: Vec<u8>,
@@ -22,31 +23,31 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn new(branch_transaction: u64, trunk_transaction: u64, ref_transactions: Vec<u64>,
-               timestamp: u64, nonce: u32, data: TransactionData) -> Self {
+               contract: u64, timestamp: u64, nonce: u32, data: TransactionData) -> Self {
         Transaction {
-            branch_transaction: branch_transaction,
-            trunk_transaction: trunk_transaction,
-            ref_transactions: ref_transactions,
-            timestamp: timestamp,
-            nonce: nonce,
+            branch_transaction,
+            trunk_transaction,
+            ref_transactions,
+            contract,
+            timestamp,
+            nonce,
             address: Vec::new(),
             signature: vec![0; 8192],
-            data: data,
+            data,
         }
     }
 
     pub fn create(branch_transaction: u64, trunk_transaction: u64, ref_transactions: Vec<u64>,
-                  nonce: u32, data: TransactionData) -> Self {
-        Transaction {
-            branch_transaction: branch_transaction,
-            trunk_transaction: trunk_transaction,
-            ref_transactions: ref_transactions,
-            timestamp: epoch_time(),
-            nonce: nonce,
-            address: Vec::new(),
-            signature: vec![0; 8192],
-            data: data,
-        }
+                  contract: u64, nonce: u32, data: TransactionData) -> Self {
+        Transaction::new(
+            branch_transaction,
+            trunk_transaction,
+            ref_transactions,
+            contract,
+            epoch_time(),
+            nonce,
+            data
+        )
     }
 
     pub fn get_trunk_hash(&self) -> u64 {
@@ -81,6 +82,14 @@ impl Transaction {
         let mut s = Sha3Hasher::new();
         self.hash(&mut s);
         s.finish()
+    }
+
+    pub fn get_contract(&self) -> u64 {
+        self.contract
+    }
+
+    pub fn get_data(&self) -> &TransactionData {
+        &self.data
     }
 
     pub fn sign(&mut self, key: &mut PrivateKey) {
@@ -131,8 +140,8 @@ mod tests {
         let trunk_hash = 1;
         let ref_hash = 2;
 
-        let transaction = Transaction::new(branch_hash,
-            trunk_hash, vec![ref_hash], 0, 0, TransactionData::Genesis);
+        let transaction = Transaction::new(branch_hash, trunk_hash,
+            vec![ref_hash], 0, 0, 0, TransactionData::Genesis);
 
         assert_eq!(transaction.get_branch_hash(), branch_hash);
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
@@ -148,8 +157,8 @@ mod tests {
         let trunk_hash = 1;
         let ref_hash = 2;
 
-        let transaction = Transaction::create(branch_hash.clone(),
-            trunk_hash.clone(), vec![ref_hash.clone()], 0, TransactionData::Genesis);
+        let transaction = Transaction::create(branch_hash, trunk_hash,
+            vec![ref_hash], 0, 0, TransactionData::Genesis);
 
         assert_eq!(transaction.get_branch_hash(), branch_hash);
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
@@ -161,7 +170,7 @@ mod tests {
     #[test]
     fn test_sign_and_verify_transaction() {
         let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(0, 0, vec![], 0, TransactionData::Genesis);
+        let mut transaction = Transaction::create(0, 0, vec![], 0, 0, TransactionData::Genesis);
         transaction.sign(&mut key);
         assert!(transaction.verify());
     }

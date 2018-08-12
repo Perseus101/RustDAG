@@ -1,8 +1,8 @@
-use std::error;
-use std::fmt;
-use std::ops::{Index,IndexMut};
+use std::ops::{Index, IndexMut};
 
 use dag::contract::state::ContractState;
+use dag::contract::result::ContractResult;
+use dag::contract::errors::ArgLenMismatchError;
 
 use super::op::ContractOp;
 
@@ -23,9 +23,9 @@ use super::op::ContractOp;
 ///     ContractOp::Mul((0, 1, 2)),
 /// ], 1, 1);
 ///
-/// assert_eq!(func.exec(ContractState::new(1), vec![1]).unwrap()[0], 1);
-/// assert_eq!(func.exec(ContractState::new(1), vec![2]).unwrap()[0], 8);
-/// assert_eq!(func.exec(ContractState::new(1), vec![3]).unwrap()[0], 27);
+/// assert_eq!(func.exec(&ContractState::new(1), &vec![1]).unwrap()[2], 1);
+/// assert_eq!(func.exec(&ContractState::new(1), &vec![2]).unwrap()[2], 8);
+/// assert_eq!(func.exec(&ContractState::new(1), &vec![3]).unwrap()[2], 27);
 /// ```
 /// Because we cannot directly cube a number with these operators, it takes two
 /// steps to cube the variable. In order to do this, we take the argument,
@@ -62,6 +62,13 @@ impl ContractFunction {
         }
     }
 
+    pub fn get_argc(&self) -> usize {
+        self.argc
+    }
+
+    pub fn get_stack_size(&self) -> usize {
+        self.stack_size
+    }
 
     /// Execute the function with args and state
     ///
@@ -71,38 +78,9 @@ impl ContractFunction {
     /// specified function
     ///
     /// # Examples
-    /// ```
-    /// # use rustdag_lib::dag::contract::source::ContractSource;
-    /// # use rustdag_lib::dag::contract::source::op::ContractOp;
-    /// # use rustdag_lib::dag::contract::source::function::ContractFunction;
-    /// # use rustdag_lib::dag::contract::state::ContractState;
-    /// # use rustdag_lib::dag::contract::Contract;
-    /// let src = ContractSource::new(vec![
-    ///     ContractFunction::new(vec![ContractOp::Add((0, 1, 1))], 1, 0),
-    ///     ContractFunction::new(vec![ContractOp::AddConst((1, 0, 0))], 0, 0),
-    ///     ContractFunction::new(vec![ContractOp::Mul((0, 1, 1))], 1, 0),
-    ///     ContractFunction::new(vec![ContractOp::MulConst((2, 0, 0))], 0, 0)
-    /// ]);
-    /// let mut contract = Contract::new(src, ContractState::new(1));
-    ///
-    /// // Add 3 to the state, i.e. 0 + 3 = 3
-    /// contract.exec(0, vec![3]);
-    /// assert_eq!(contract.get_state()[0], 3);
-    ///
-    /// // Add constant 1 to the state, i.e. 3 + 1 = 4
-    /// contract.exec(1, vec![]);
-    /// assert_eq!(contract.get_state()[0], 4);
-    ///
-    /// // Multiply the state by 3, i.e. 4 * 3 = 12
-    /// contract.exec(2, vec![3]);
-    /// assert_eq!(contract.get_state()[0], 12);
-    ///
-    /// // Multiply the state by constant 2, i.e. 12 * 2 = 24
-    /// contract.exec(3, vec![]);
-    /// assert_eq!(contract.get_state()[0], 24);
-    /// ```
-    pub fn exec(&self, state: ContractState, args: Vec<u8>)
-        -> Result<ContractState, ArgLenMismatchError> {
+    /// TODO
+    pub fn exec(&self, state: &ContractState, args: &Vec<u8>)
+            -> Result<Vec<u8>, ArgLenMismatchError> {
         if args.len() != self.argc {
             return Err(ArgLenMismatchError);
         }
@@ -131,39 +109,33 @@ impl ContractFunction {
                 }
             }
         }
-        Ok(mem.state())
+        Ok(mem.inner())
+    }
+
+    /// Verify the accuracy of a function execution
+    pub fn verify(&self, _state: &ContractState, _result: &ContractResult) -> bool {
+        // TODO
+        true
     }
 }
 
-#[derive(Debug)]
-pub struct ArgLenMismatchError;
-impl fmt::Display for ArgLenMismatchError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Incorrect argument array length")
-    }
-}
-
-impl error::Error for ArgLenMismatchError {
-    fn description(&self) -> &str { "Incorrect argument array length" }
-}
-
-struct _MemMap {
-    argv: Vec<u8>,
-    stack: Vec<u8>,
-    state: ContractState,
+pub struct _MemMap {
+    mem: Vec<u8>
 }
 
 impl _MemMap {
-    fn new(argv: Vec<u8>, stack_size: usize, state: ContractState) -> Self {
+    fn new(argv: &Vec<u8>, stack_size: usize, state: &ContractState) -> Self {
+        let mut mem = vec![0; argv.len() + stack_size + state.len()];
+        mem[..argv.len()].copy_from_slice(argv);
+        mem[(argv.len() + stack_size)..].copy_from_slice(&state.as_slice());
+
         _MemMap {
-            argv,
-            stack: vec![0; stack_size],
-            state,
+            mem
         }
     }
 
-    fn state(self) -> ContractState {
-        self.state
+    fn inner(self) -> Vec<u8> {
+        self.mem
     }
 }
 
@@ -171,29 +143,13 @@ impl Index<usize> for _MemMap {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        if index < self.argv.len() {
-            &self.argv[index]
-        }
-        else if index < self.argv.len() + self.stack.len() {
-            &self.stack[index - self.argv.len()]
-        }
-        else {
-            &self.state[index - self.argv.len() - self.stack.len()]
-        }
+        &self.mem[index]
     }
 }
 
 impl IndexMut<usize> for _MemMap {
     fn index_mut(&mut self, index: usize) -> &mut u8 {
-        if index < self.argv.len() {
-            &mut self.argv[index]
-        }
-        else if index < self.argv.len() + self.stack.len() {
-            &mut self.stack[index - self.argv.len()]
-        }
-        else {
-            &mut self.state[index - self.argv.len() - self.stack.len()]
-        }
+        &mut self.mem[index]
     }
 }
 
@@ -208,7 +164,7 @@ mod test {
     fn test_arg_len_mismatch() {
         let func = ContractFunction::new(vec![ContractOp::Add((0, 0, 0))], 1, 0);
 
-        assert!(func.exec(ContractState::new(0), vec![]).is_err());
+        assert!(func.exec(&ContractState::new(0), &vec![]).is_err());
     }
 
     #[test]
@@ -217,8 +173,8 @@ mod test {
 
         // Test updating state
         let state = ContractState::new(1);
-        if let Ok(state) = func.exec(state, vec![1]) {
-            assert_eq!(state[0], 1);
+        if let Ok(result) = func.exec(&state, &vec![1]) {
+            assert_eq!(result[1], 1);
         }
     }
 
@@ -227,8 +183,8 @@ mod test {
         let func = ContractFunction::new(vec![ContractOp::AddConst((1, 0, 1))], 1, 0);
 
         let state = ContractState::new(1);
-        if let Ok(state) = func.exec(state, vec![0]) {
-            assert_eq!(state[0], 1);
+        if let Ok(result) = func.exec(&state, &vec![0]) {
+            assert_eq!(result[1], 1);
         }
     }
 
@@ -238,8 +194,8 @@ mod test {
 
         let mut state = ContractState::new(1);
         state[0] = 1;
-        if let Ok(state) = func.exec(state, vec![2]) {
-            assert_eq!(state[0], 2);
+        if let Ok(result) = func.exec(&state, &vec![2]) {
+            assert_eq!(result[1], 2);
         }
     }
 
@@ -249,8 +205,8 @@ mod test {
 
         let mut state = ContractState::new(1);
         state[0] = 1;
-        if let Ok(state) = func.exec(state, vec![1]) {
-            assert_eq!(state[0], 0);
+        if let Ok(result) = func.exec(&state, &vec![1]) {
+            assert_eq!(result[1], 0);
         }
     }
 
@@ -265,8 +221,8 @@ mod test {
 
         // Test updating state
         let state = ContractState::new(1);
-        if let Ok(state) = func.exec(state, vec![1]) {
-            assert_eq!(state[0], 7);
+        if let Ok(result) = func.exec(&state, &vec![1]) {
+            assert_eq!(result[4], 7);
         }
     }
 }
