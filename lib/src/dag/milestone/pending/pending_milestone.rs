@@ -110,16 +110,16 @@ impl PendingMilestone {
 mod tests {
     use super::*;
 
-    use dag::transaction::Transaction;
+    use dag::transaction::{Transaction, data::TransactionData};
     use dag::milestone::Milestone;
 
     #[test]
     fn test_new_pending_milestone() {
-        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0);
+        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
-        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0);
+        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, TransactionData::Genesis);
 
         let pending = PendingMilestone::new(transaction.clone(), milestone);
         match pending {
@@ -132,16 +132,16 @@ mod tests {
 
     #[test]
     fn test_pending_state() {
-        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0);
+        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
-        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0);
+        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, TransactionData::Genesis);
 
         let pending = PendingMilestone::new(transaction.clone(), milestone);
 
         // New milestone incoming
-        let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 0);
+        let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 0, TransactionData::Genesis);
         match pending.clone().next(MilestoneEvent::New((hash, second_transaction))) {
             Ok(PendingMilestone::Negotiating(_)) => {},
             _ => panic!("New milestone did not move into negotiating state"),

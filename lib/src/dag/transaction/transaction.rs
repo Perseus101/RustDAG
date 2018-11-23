@@ -6,44 +6,48 @@ use security::ring::digest::SHA512_256;
 
 use util::epoch_time;
 
+use dag::transaction::data::TransactionData;
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Transaction {
     branch_transaction: u64,
     trunk_transaction: u64,
     ref_transactions: Vec<u64>,
+    contract: u64,
     timestamp: u64,
     nonce: u32,
-    transaction_type: u8,
     address: Vec<u8>,
     signature: Vec<u8>,
+    data: TransactionData,
 }
 
 impl Transaction {
     pub fn new(branch_transaction: u64, trunk_transaction: u64, ref_transactions: Vec<u64>,
-               timestamp: u64, nonce: u32, transaction_type: u8) -> Transaction {
+               contract: u64, timestamp: u64, nonce: u32, data: TransactionData) -> Self {
         Transaction {
-            branch_transaction: branch_transaction,
-            trunk_transaction: trunk_transaction,
-            ref_transactions: ref_transactions,
-            timestamp: timestamp,
-            nonce: nonce,
-            transaction_type: transaction_type,
+            branch_transaction,
+            trunk_transaction,
+            ref_transactions,
+            contract,
+            timestamp,
+            nonce,
             address: Vec::new(),
             signature: vec![0; 8192],
+            data,
         }
     }
 
-    pub fn create(branch_transaction: u64, trunk_transaction: u64, ref_transactions: Vec<u64>, nonce: u32) -> Transaction {
-        Transaction {
-            branch_transaction: branch_transaction,
-            trunk_transaction: trunk_transaction,
-            ref_transactions: ref_transactions,
-            timestamp: epoch_time(),
-            nonce: nonce,
-            transaction_type: 0,
-            address: Vec::new(),
-            signature: vec![0; 8192],
-        }
+    pub fn create(branch_transaction: u64, trunk_transaction: u64, ref_transactions: Vec<u64>,
+                  contract: u64, nonce: u32, data: TransactionData) -> Self {
+        Transaction::new(
+            branch_transaction,
+            trunk_transaction,
+            ref_transactions,
+            contract,
+            epoch_time(),
+            nonce,
+            data
+        )
     }
 
     pub fn get_trunk_hash(&self) -> u64 {
@@ -78,6 +82,14 @@ impl Transaction {
         let mut s = Sha3Hasher::new();
         self.hash(&mut s);
         s.finish()
+    }
+
+    pub fn get_contract(&self) -> u64 {
+        self.contract
+    }
+
+    pub fn get_data(&self) -> &TransactionData {
+        &self.data
     }
 
     pub fn sign(&mut self, key: &mut PrivateKey) {
@@ -115,7 +127,6 @@ impl Hash for Transaction {
         self.ref_transactions.hash(state);
         self.timestamp.hash(state);
         self.nonce.hash(state);
-        self.transaction_type.hash(state);
     }
 }
 
@@ -129,15 +140,15 @@ mod tests {
         let trunk_hash = 1;
         let ref_hash = 2;
 
-        let transaction = Transaction::new(branch_hash,
-            trunk_hash, vec![ref_hash], 0, 0, 0);
+        let transaction = Transaction::new(branch_hash, trunk_hash,
+            vec![ref_hash], 0, 0, 0, TransactionData::Genesis);
 
         assert_eq!(transaction.get_branch_hash(), branch_hash);
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
         assert_eq!(vec![ref_hash, branch_hash, trunk_hash],
             transaction.get_all_refs());
         assert_eq!(0, transaction.get_nonce());
-        assert_eq!(5884700003931448933, transaction.get_hash());
+        assert_eq!(7216540755162860552, transaction.get_hash());
     }
 
     #[test]
@@ -146,8 +157,8 @@ mod tests {
         let trunk_hash = 1;
         let ref_hash = 2;
 
-        let transaction = Transaction::create(branch_hash.clone(),
-            trunk_hash.clone(), vec![ref_hash.clone()], 0);
+        let transaction = Transaction::create(branch_hash, trunk_hash,
+            vec![ref_hash], 0, 0, TransactionData::Genesis);
 
         assert_eq!(transaction.get_branch_hash(), branch_hash);
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
@@ -159,7 +170,7 @@ mod tests {
     #[test]
     fn test_sign_and_verify_transaction() {
         let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(0, 0, vec![], 0);
+        let mut transaction = Transaction::create(0, 0, vec![], 0, 0, TransactionData::Genesis);
         transaction.sign(&mut key);
         assert!(transaction.verify());
     }
