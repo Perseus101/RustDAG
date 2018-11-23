@@ -4,6 +4,11 @@ use rand::{Rng,thread_rng};
 
 use dag::transaction::Transaction;
 use dag::milestone::Milestone;
+use dag::milestone::pending::{
+    PendingMilestone,
+    MilestoneEvent,
+    error::MilestoneError
+};
 
 use security::hash::proof::valid_proof;
 
@@ -18,19 +23,22 @@ pub struct BlockDAG {
     transactions: HashMap<u64, Transaction>,
     pending_transactions: HashMap<u64, Transaction>,
     milestones: Vec<Milestone>,
+    pending_milestone: PendingMilestone,
     tips: Vec<u64>,
 }
 
 impl Default for BlockDAG {
 	fn default() -> Self {
+        let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH, vec![], 0, 0, 0);
+        let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
+
 		let mut dag = BlockDAG {
 			transactions: HashMap::new(),
             pending_transactions: HashMap::new(),
             milestones: Vec::new(),
+            pending_milestone: PendingMilestone::Approved(genesis_milestone.clone()),
             tips: Vec::new(),
 		};
-        let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH, vec![], 0, 0, 0);
-        let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
 
         let genesis_transaction_hash = genesis_transaction.get_hash();
         let genesis_branch = Transaction::new(genesis_transaction_hash, genesis_transaction_hash, vec![], 0, 0, 0);
@@ -90,14 +98,41 @@ impl BlockDAG {
 
         if transaction.get_nonce() > MILESTONE_NONCE_MIN &&
             transaction.get_nonce() < MILESTONE_NONCE_MAX {
-            if self.add_milestone(transaction.clone()) {
+            if self.create_milestone(transaction.clone()) {
                 return TransactionStatus::Milestone;
             }
         }
         TransactionStatus::Pending
     }
 
-    /// Try to add a milestone
+    /// Check the validity of a milestone and add it as a pending milestone
+    ///
+    /// Walks backward on the graph searching for the previous milestone to
+    /// ensure the new milestone references the previous one
+    ///
+    /// If the milestone is added, returns true
+    fn create_milestone(&mut self, transaction: Transaction) -> bool {
+        let prev_milestone = self.milestones[self.milestones.len() - 1].clone();
+        if self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp()) {
+            let mut error: Option<MilestoneError> = None;
+            self.pending_milestone = match self.pending_milestone.clone()
+                .next(MilestoneEvent::New((prev_milestone.get_hash(), transaction))) {
+                    Ok(pending) => pending,
+                    Err(err) => {
+                        let (pending, error_data) = err.convert();
+                        error = Some(error_data);
+                        pending
+                    }
+            };
+
+            error.is_none()
+        }
+        else {
+            false
+        }
+    }
+
+    /// Add a confirmed milestone to the list of milestones
     ///
     /// Walks backward on the graph searching for the previous milestone to
     /// ensure the new milestone references the previous one
