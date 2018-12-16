@@ -5,14 +5,16 @@ pub struct MilestonePubKey {}
 #[derive(Clone)]
 pub struct MilestoneSignature {
     milestone: u64,
+    contract: u64,
     pub_key: MilestonePubKey,
     next_key: u64,
 }
 
 impl MilestoneSignature {
-    pub fn new(milestone: u64, next_key: u64) -> Self {
+    pub fn new(milestone: u64, contract: u64, next_key: u64) -> Self {
         MilestoneSignature {
             milestone: milestone,
+            contract: contract,
             pub_key: MilestonePubKey {},
             next_key: next_key
         }
@@ -21,22 +23,7 @@ impl MilestoneSignature {
     pub fn get_milestone(&self) -> u64 {
         self.milestone
     }
-}
-
-pub struct MilestoneSelection {
-    pub signature: MilestoneSignature,
-}
-
-impl From<MilestoneSelection> for MilestoneSignature {
-    fn from(selection: MilestoneSelection) -> Self {
-        selection.signature
-    }
-}
-
-impl MilestoneSelection {
-    pub fn new(signature: MilestoneSignature) -> Self {
-        MilestoneSelection {
-            signature: signature
-        }
+    pub fn get_contract(&self) -> u64 {
+        self.contract
     }
 }
