@@ -11,6 +11,8 @@ use dag::milestone::pending::{
     error::MilestoneError
 };
 
+use super::incomplete_chain::IncompleteChain;
+
 use security::hash::proof::valid_proof;
 
 use util::types::{TransactionHashes,TransactionStatus};
@@ -138,40 +140,46 @@ impl BlockDAG {
     /// If the milestone is added, returns true
     fn create_milestone(&mut self, transaction: Transaction) -> bool {
         let prev_milestone = self.milestones[self.milestones.len() - 1].clone();
-        if self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp()) {
-            let mut error: Option<MilestoneError> = None;
-            self.pending_milestone = match self.pending_milestone.clone()
-                .next(MilestoneEvent::New((prev_milestone.get_hash(), transaction))) {
-                    Ok(pending) => pending,
-                    Err(err) => {
-                        let (pending, error_data) = err.convert();
-                        error = Some(error_data);
-                        pending
-                    }
-            };
-
-            error.is_none()
-        }
-        else {
-            false
-        }
+        let mut error: Option<MilestoneError> = None;
+        self.pending_milestone = match self.pending_milestone.clone()
+            .next(MilestoneEvent::New((prev_milestone.get_hash(), transaction))) {
+                Ok(pending) => pending,
+                Err(err) => {
+                    let (pending, error_data) = err.convert();
+                    error = Some(error_data);
+                    pending
+                }
+        };
+        // TODO Log error
+        error.is_none()
     }
 
     /// Add a confirmed milestone to the list of milestones
     ///
-    /// Walks backward on the graph searching for the previous milestone to
-    /// ensure the new milestone references the previous one
+    /// Walks backward on the graph searching for the previous milestone
     ///
-    /// If the milestone is added, returns true
-    fn add_milestone(&mut self, transaction: Transaction) -> bool {
+    /// If the milestone is found, return the chain of transactions to it
+    ///
+    /// If the milestone is not found, return and IncompleteChain error with any
+    /// transactions that were not found locally
+    pub fn verify_milestone(&mut self, transaction: Transaction) -> Result<Vec<Transaction>, IncompleteChain> {
         let prev_milestone = self.milestones[self.milestones.len() - 1].clone();
-        if self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp()) {
+        let mut transaction_chain: Vec<Transaction> = Vec::new();
+        let mut missing_hashes: Vec<u64> = Vec::new();
+
+        if self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp(),
+            &mut |transaction: &Transaction| {
+                transaction_chain.push(transaction.clone());
+            },
+            &mut |hash: u64| {
+                missing_hashes.push(hash);
+            }) {
             self.confirm_transactions(&transaction);
             self.milestones.push(Milestone::new(prev_milestone.get_hash(), transaction));
-            true
+            Ok(transaction_chain)
         }
         else {
-            false
+            Err(IncompleteChain::new(missing_hashes))
         }
     }
 
@@ -179,18 +187,25 @@ impl BlockDAG {
     /// by hash. Stops at any transaction that occurred before timestamp
     ///
     /// If the transaction is found, returns true
-    fn walk_search(&self, transaction: &Transaction, hash: u64, timestamp: u64) -> bool {
+    fn walk_search<F, G>(&self, transaction: &Transaction, hash: u64,
+            timestamp: u64, chain_function: &mut F, not_found_function: &mut G) -> bool
+            where F: FnMut(&Transaction), G: FnMut(u64) {
         if transaction.get_timestamp() < timestamp {
             return false;
         }
         for transaction_hash in transaction.get_all_refs() {
             if let Some(transaction) = self.get_transaction(transaction_hash) {
                 if transaction_hash == hash {
+                    chain_function(&transaction);
                     return true;
                 }
-                if self.walk_search(&transaction, hash, timestamp) {
+                if self.walk_search(&transaction, hash, timestamp, chain_function, not_found_function) {
+                    chain_function(&transaction);
                     return true;
                 }
+            }
+            else {
+                not_found_function(transaction_hash);
             }
         }
         false
@@ -315,19 +330,19 @@ mod tests {
 
         let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![],
             0, 0, TransactionData::Genesis);
-        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
 
         let transaction = Transaction::create(TRUNK_HASH, 0, vec![], 0, 0,
             TransactionData::Genesis);
-        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
 
         let transaction = Transaction::create(0, BRANCH_HASH, vec![], 0, 0,
             TransactionData::Genesis);
-        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
 
         let transaction = Transaction::create(0, 0, vec![], 0, 0,
             TransactionData::Genesis);
-        assert!(!dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        assert!(!dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
     }
 
     #[test]
@@ -339,7 +354,13 @@ mod tests {
             vec![], 0, BASE_NONCE, data);
         transaction.sign(&mut key);
         assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
-        assert!(dag.add_milestone(transaction));
+        match dag.verify_milestone(transaction) {
+            Ok(chain) => {
+                assert_eq!(1, chain.len());
+                assert_eq!(chain[0], dag.get_transaction(TRUNK_HASH).unwrap());
+            },
+            Err(err) => panic!("Unexpected missing transactions: {:?}", err)
+        }
     }
 
     #[test]

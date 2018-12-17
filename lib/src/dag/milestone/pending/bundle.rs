@@ -77,7 +77,7 @@ impl MilestoneBundle {
     pub fn complete_signatures(&self) -> bool {
         for transaction in self.transaction_chain.iter() {
             // Look for a signature for this transaction
-            if let Some(signature) =
+            if let Some(_signature) =
                     self.signatures.get(&transaction.get_contract()) {
                 // TODO check signature validity
             }
