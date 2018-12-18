@@ -13,6 +13,7 @@ restson = "0.3.0"
 ring = "0.11.0"
 lamport_sigs = "0.4.1"
 rand = "0.5.3"
+replace_with = "0.1.2"
 
 [lib]
 name = "rustdag_lib"

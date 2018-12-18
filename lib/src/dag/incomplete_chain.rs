@@ -16,7 +16,7 @@ impl IncompleteChain {
 
 impl fmt::Display for IncompleteChain {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Hash Collision")
+        write!(f, "{:?}", self)
     }
 }
 

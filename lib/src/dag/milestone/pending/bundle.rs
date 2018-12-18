@@ -82,7 +82,6 @@ impl MilestoneBundle {
                 // TODO check signature validity
             }
             else {
-                println!("Missing signature: {:?}", transaction.get_contract());
                 return false;
             }
         }
