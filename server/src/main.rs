@@ -1,11 +1,11 @@
-#![feature(plugin)]
-#![plugin(rocket_codegen)]
+#![feature(proc_macro_hygiene, decl_macro)]
 
+#[macro_use]
 extern crate rocket;
 extern crate rocket_contrib;
 
 use rocket::State;
-use rocket_contrib::Json;
+use rocket_contrib::json::Json;
 
 extern crate rustdag_lib;
 

@@ -91,7 +91,6 @@ impl MilestoneTreeNode {
             return if new_data.branch.get_hash() == prev_hash
                     || new_data.trunk.get_hash() == prev_hash {
                 // Pending state complete, return data for signing state
-                // NOTE includes previous milestone
                 Ok(Some(vec![
                     (hash, new_data.contract),
                 ]))
