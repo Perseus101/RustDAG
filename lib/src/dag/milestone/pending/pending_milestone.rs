@@ -1,13 +1,20 @@
-use std::cmp::Ordering;
-use std::error::Error;
-use std::fmt;
-
 use dag::transaction::Transaction;
-use dag::milestone::Milestone;
+use dag::milestone::{
+    Milestone,
+    pending::{
+        MilestoneError,
+        _MilestoneErrorTag
+    }
+};
 
-use super::error::_MilestoneErrorTag;
-use super::signing;
-use super::bundle::MilestoneBundle;
+use replace_with::replace_with_or_abort;
+
+use super::state::{
+    PendingState,
+    SigningState,
+    PendingMilestoneState,
+    StateUpdate,
+};
 
 /// Manages the state of a milestone in the process of being confirmed
 ///
@@ -17,19 +24,9 @@ use super::bundle::MilestoneBundle;
 /// Once a milestone enters the Approved state, it is considered confirmed.
 #[derive(Clone)]
 pub enum PendingMilestone {
-    Pending(MilestoneBundle),
-    Signing(MilestoneBundle),
-    Approved(Milestone)
-}
-
-/// Milestone confirmation step events
-///
-/// These enum members represent events that move a milestone from creation
-/// to confirmation.
-pub enum MilestoneEvent {
-    New((u64, Transaction)),
-    Chain(Transaction),
-    Sign(signing::MilestoneSignature),
+    Pending(PendingState),
+    Signing(SigningState),
+    Approved(Milestone),
 }
 
 impl PendingMilestone {
@@ -38,116 +35,46 @@ impl PendingMilestone {
         let milestone_hash = previous_milestone.get_hash();
         if transaction.get_trunk_hash() == milestone_hash
                 || transaction.get_branch_hash() == milestone_hash {
-            PendingMilestone::Signing(MilestoneBundle::new(previous_milestone.get_hash(), transaction))
+            let transaction_chain = vec![
+                (transaction.get_hash(), transaction.get_contract())
+            ];
+            PendingMilestone::Signing(SigningState::new(transaction, milestone_hash, transaction_chain))
         }
         else {
-            PendingMilestone::Pending(MilestoneBundle::new(previous_milestone.get_hash(), transaction))
+            PendingMilestone::Pending(PendingState::new(transaction, previous_milestone))
         }
     }
 
-    pub fn next(self, event: MilestoneEvent) -> Result<Self, _MilestoneErrorTag> {
-        match (self, event) {
-            // Pending state
-            (PendingMilestone::Pending(bundle), MilestoneEvent::New((prev_hash, transaction))) => {
-                let second_bundle = MilestoneBundle::new(prev_hash, transaction);
-                match select_bundle(bundle, second_bundle) {
-                    Ok(bundle) => Ok(PendingMilestone::Pending(bundle)),
-                    Err(err) => Err(_MilestoneErrorTag::HashCollision(PendingMilestone::Pending(err.get_bundle())))
+    pub fn next(&mut self, event: StateUpdate) -> Result<(), MilestoneError> {
+        let mut res = Ok(());
+        {
+            let _res = &mut res;
+            replace_with_or_abort(self, move |_self| {
+                let out = match _self {
+                    PendingMilestone::Pending(pending) => {
+                        pending.next(&event)
+                    }
+                    PendingMilestone::Signing(signing) => {
+                        signing.next(&event)
+                    }
+                    PendingMilestone::Approved(_) => {
+                        match event {
+                            StateUpdate::Chain(_) => Err(_MilestoneErrorTag::StaleChain(_self)),
+                            StateUpdate::Sign(_) => Err(_MilestoneErrorTag::StaleSignature(_self))
+                        }
+                    }
+                };
+                match out {
+                    Ok(state) => state,
+                    Err(err) => {
+                        let (state, _err) = err.convert();
+                        *_res = Err(_err);
+                        state
+                    }
                 }
-            },
-            (PendingMilestone::Pending(mut bundle), MilestoneEvent::Chain(transaction)) => {
-                bundle.add_transaction(transaction);
-                if bundle.complete_chain() { Ok(PendingMilestone::Signing(bundle)) }
-                else { Ok(PendingMilestone::Pending(bundle)) }
-            }
-            (PendingMilestone::Pending(mut bundle), MilestoneEvent::Sign(signature)) => {
-                bundle.add_signature(signature);
-                Ok(PendingMilestone::Pending(bundle))
-            },
-
-
-            // Signing state
-            (PendingMilestone::Signing(bundle), MilestoneEvent::New((prev_hash, transaction))) => {
-                let second_bundle = MilestoneBundle::new(prev_hash, transaction);
-                match select_bundle(bundle, second_bundle) {
-                    Ok(bundle) => Ok(PendingMilestone::Signing(bundle)),
-                    Err(err) => Err(_MilestoneErrorTag::HashCollision(PendingMilestone::Signing(err.get_bundle())))
-                }
-            },
-            (PendingMilestone::Signing(bundle), MilestoneEvent::Chain(_)) => {
-                Err(_MilestoneErrorTag::StaleChain(PendingMilestone::Signing(bundle)))
-            }
-            (PendingMilestone::Signing(mut bundle), MilestoneEvent::Sign(signature)) => {
-                bundle.add_signature(signature);
-                if bundle.complete_signatures() { Ok(PendingMilestone::Approved(bundle.into()))}
-                else { Ok(PendingMilestone::Signing(bundle)) }
-            },
-
-
-            // Approved state
-            (PendingMilestone::Approved(milestone), MilestoneEvent::New((prev_hash, transaction))) => {
-                if prev_hash != milestone.get_hash() {
-                    Err(_MilestoneErrorTag::ConflictingMilestone(PendingMilestone::Approved(milestone)))
-                }
-                else {
-                    Ok(PendingMilestone::new(transaction, milestone))
-                }
-            },
-
-            (PendingMilestone::Approved(milestone), _) => { Ok(PendingMilestone::Approved(milestone)) },
+            });
         }
-    }
-}
-
-struct HashCollisionError {
-    bundle: MilestoneBundle
-}
-
-impl fmt::Debug for HashCollisionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Hash Collision")
-    }
-}
-
-impl fmt::Display for HashCollisionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Hash Collision")
-    }
-}
-
-impl Error for HashCollisionError {}
-
-impl HashCollisionError {
-    pub fn new(bundle: MilestoneBundle) -> Self {
-        HashCollisionError { bundle }
-    }
-
-    pub fn get_bundle(self) -> MilestoneBundle {
-        self.bundle
-    }
-}
-
-fn select_bundle(first_bundle: MilestoneBundle, second_bundle: MilestoneBundle)
-        -> Result<MilestoneBundle, HashCollisionError> {
-    let first_transaction = first_bundle.get_milestone_transaction().clone();
-    let second_transaction = second_bundle.get_milestone_transaction().clone();
-    match first_transaction.get_nonce().cmp(&second_transaction.get_nonce()) {
-        Ordering::Less => Ok(first_bundle),
-        Ordering::Greater => Ok(second_bundle),
-        Ordering::Equal => {
-            // In the VERY UNLIKELY event that the nonces are the same,
-            // compare hashes to determine priority
-            match first_transaction.get_hash()
-                    .cmp(&second_transaction.get_hash()) {
-                Ordering::Less => Ok(first_bundle),
-                Ordering::Greater => Ok(second_bundle),
-                Ordering::Equal => {
-                    // In the EVEN MORE unlikely event that there is a
-                    // hash collision, give up
-                    Err(HashCollisionError::new(first_bundle))
-                }
-            }
-        }
+        res
     }
 }
 
@@ -157,6 +84,42 @@ mod tests {
 
     use dag::transaction::{Transaction, data::TransactionData};
     use dag::milestone::Milestone;
+    use dag::milestone::pending::MilestoneSignature;
+
+    fn update(pending: &PendingMilestone, update: StateUpdate) -> PendingMilestone {
+        let mut _pending = pending.clone();
+        assert!(_pending.next(update).is_ok());
+        _pending
+    }
+
+    fn raw_update(pending: &PendingMilestone, update: StateUpdate)
+            -> Result<(), MilestoneError> {
+        let mut _pending = pending.clone();
+        let res = _pending.next(update);
+        if let Err(_) = &res {
+            match pending {
+                PendingMilestone::Pending(_) => {
+                    match _pending {
+                        PendingMilestone::Pending(_) => {},
+                        _ => panic!("Unexpected state transition")
+                    }
+                },
+                PendingMilestone::Signing(_) => {
+                    match _pending {
+                        PendingMilestone::Signing(_) => {},
+                        _ => panic!("Unexpected state transition")
+                    }
+                },
+                PendingMilestone::Approved(_) => {
+                    match _pending {
+                        PendingMilestone::Approved(_) => {},
+                        _ => panic!("Unexpected state transition")
+                    }
+                }
+            }
+        }
+        res
+    }
 
     #[test]
     fn test_new_pending_milestone() {
@@ -191,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pending_state() {
+    fn test_pending_milestone_state() {
         let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
@@ -202,32 +165,24 @@ mod tests {
 
         let pending = PendingMilestone::new(transaction.clone(), milestone);
 
-        // New milestone incoming
-        let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 0, TransactionData::Genesis);
-        match pending.clone().next(MilestoneEvent::New((hash, second_transaction))) {
-            Ok(PendingMilestone::Pending(_)) => {},
-            Ok(_) => panic!("New milestone did not remain in pending state"),
-            Err(err) => panic!("Unexpected error while creating new milestone: {:?}", err)
-        }
-
         // Transaction chain incoming
-        match pending.clone().next(MilestoneEvent::Chain(trunk_transaction)) {
-            Ok(PendingMilestone::Signing(_)) => {},
-            Ok(_) => panic!("Pending milestone did not transition to signing state"),
-            Err(err) => panic!("Unexpected error while adding chain: {:?}", err)
+        match update(&pending, StateUpdate::Chain(trunk_transaction)) {
+            PendingMilestone::Signing(_) => {},
+            _ => panic!("Pending milestone did not transition to signing state"),
         }
 
         // Signature incoming
-        match pending.clone().next(MilestoneEvent::Sign(
-                signing::MilestoneSignature::new(hash, 0, 0))) {
-            Ok(PendingMilestone::Pending(_)) => {},
-            Ok(_) => panic!("Pending milestone did not stay pending state"),
-            Err(err) => panic!("Unexpected error while signing: {:?}", err)
+        match raw_update(&pending, StateUpdate::Sign(
+                MilestoneSignature::new(hash, 0, 0))) {
+            Err(MilestoneError::StaleSignature) => {},
+            Err(err) => panic!("Unexpected error while signing: {:?}", err),
+            Ok(_) => panic!("New signature in pending state did not raise error"),
         }
+
     }
 
     #[test]
-    fn test_signing_state() {
+    fn test_signing_milestone_state() {
         let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
@@ -241,52 +196,34 @@ mod tests {
         let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 1, TransactionData::Genesis);
 
         // Create a milestone in the signing state
-        let pending = match PendingMilestone::new(new_milestone.clone(), milestone)
-                .next(MilestoneEvent::Chain(transaction)) {
-            Ok(PendingMilestone::Signing(bundle)) => {
-                assert_eq!(bundle.get_hash(), new_milestone.get_hash());
-                PendingMilestone::Signing(bundle)
-            },
-            Ok(_) => panic!("Pending milestone did not move into signature state"),
-            Err(err) => panic!("Unexpected error while signing: {:?}", err)
-        };
-
-        // New milestone incoming
-        match pending.clone().next(MilestoneEvent::New((hash, second_transaction.clone()))) {
-            Ok(PendingMilestone::Signing(_)) => {},
-            Ok(_) => panic!("New milestone did not stay in signing state"),
-            Err(err) => panic!("Unexpected error while signing: {:?}", err)
+        let mut pending = PendingMilestone::new(new_milestone.clone(), milestone);
+        assert!(pending.next(StateUpdate::Chain(transaction)).is_ok());
+        match &pending {
+            PendingMilestone::Signing(_) => {},
+            _ => panic!("Failed to create pending milestone in signing state")
         }
-
         // Transaction chain incoming
-        match pending.clone().next(MilestoneEvent::Chain(second_transaction.clone())) {
-            Err(_MilestoneErrorTag::StaleChain(PendingMilestone::Signing(bundle))) => {
-                assert_eq!(bundle.get_hash(), new_milestone.get_hash());
-            },
+        match raw_update(&pending, StateUpdate::Chain(second_transaction.clone())) {
+            Err(MilestoneError::StaleChain) => {},
             Err(err) => panic!("Unexpected error while signing: {:?}", err),
             Ok(_) => panic!("New chain transaction in signing state did not raise error"),
         }
 
         // Incoming signature
         // Add two signatures, one for each of the contracts involved in this milestone
-        match pending.clone().next(MilestoneEvent::Sign(signing::MilestoneSignature::new(hash, 1, 0))) {
-            Ok(pending) => { // First signature added successfully
-                // Assert the milestone is still in the signing state
-                match pending.clone() {
-                    PendingMilestone::Signing(_) => {},
-                    _ => panic!("Pending milestone did not stay in the signing state"),
-                }
-
+        match update(&pending, StateUpdate::Sign(MilestoneSignature::new(hash, 1, 0))) {
+            PendingMilestone::Signing(state) => {
+                // First signature added successfully
                 // Add the second signature
-                match pending.next(MilestoneEvent::Sign(signing::MilestoneSignature::new(hash, 2, 0))) {
-                    Ok(PendingMilestone::Approved(milestone)) => {
+                match update(&PendingMilestone::Signing(state),
+                        StateUpdate::Sign(MilestoneSignature::new(hash, 2, 0))) {
+                    PendingMilestone::Approved(milestone) => {
                         assert_eq!(milestone.get_hash(), new_milestone.get_hash());
                     },
-                    Ok(_) => panic!("Pending milestone did not transition to approved state"),
-                    Err(err) => panic!("Unexpected error while signing: {:?}", err)
+                    _ => panic!("Pending milestone did not transition to approved state")
                 }
             },
-            Err(err) => panic!("Unexpected error while signing: {:?}", err)
+            _ => panic!("Unexpected state transition")
         }
     }
 
@@ -302,71 +239,29 @@ mod tests {
                 Vec::new(), 2, 0, 0, TransactionData::Genesis);
 
         // Create a milestone in the signing state
-        let pending = match PendingMilestone::new(new_milestone.clone(), milestone)
-                .next(MilestoneEvent::Chain(transaction)) {
-            Ok(PendingMilestone::Signing(bundle)) => {
-                assert_eq!(bundle.get_hash(), new_milestone.get_hash());
-                PendingMilestone::Signing(bundle)
-            },
-            Ok(_) => panic!("Pending milestone did not move into signature state"),
-            Err(err) => panic!("Unexpected error while signing: {:?}", err)
-        };
+        let mut pending = PendingMilestone::new(new_milestone.clone(), milestone);
+        assert!(pending.next(StateUpdate::Chain(transaction)).is_ok());
         // Move the signing state milestone into the approved state
         // Add two signatures, one for each of the contracts involved in this milestone
-        let approved = match pending.clone().next(MilestoneEvent::Sign(
-                signing::MilestoneSignature::new(hash, 1, 0))) {
-            Ok(pending) => { // First signature added successfully
-                // Assert the milestone is still in the signing state
-                match pending.clone() {
-                    PendingMilestone::Signing(_) => {},
-                    _ => panic!("Pending milestone did not stay in the signing state"),
-                }
+        assert!(pending.next(StateUpdate::Sign(
+                MilestoneSignature::new(hash, 1, 0))).is_ok());
+        assert!(pending.next(StateUpdate::Sign(
+                MilestoneSignature::new(hash, 2, 0))).is_ok());
 
-                // Add the second signature
-                match pending.next(MilestoneEvent::Sign(signing::MilestoneSignature::new(hash, 2, 0))) {
-                    Ok(PendingMilestone::Approved(milestone)) => {
-                        assert_eq!(milestone.get_hash(), new_milestone.get_hash());
-                        PendingMilestone::Approved(milestone)
-                    },
-                    Ok(_) => panic!("Pending milestone did not transition to approved state"),
-                    Err(err) => panic!("Unexpected error while signing: {:?}", err)
-                }
-            },
-            Err(err) => panic!("Unexpected error while signing: {:?}", err)
-        };
-
-        // Chain and signature events should do nothing
+        let approved = pending;
+        // Chain and signature events should raise errors
         let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 1, TransactionData::Genesis);
-        match approved.clone().next(MilestoneEvent::Chain(second_transaction)) {
-            Ok(PendingMilestone::Approved(milestone)) => {
-                assert_eq!(milestone.get_hash(), new_milestone.get_hash());
-            },
-            Ok(_) => panic!("Pending milestone did not remain in approved state"),
-            Err(err) => panic!("Unexpected error while adding chain: {:?}", err)
+        match raw_update(&approved, StateUpdate::Chain(second_transaction)) {
+            Err(MilestoneError::StaleChain) => {},
+            Err(err) => panic!("Unexpected error while adding chain: {:?}", err),
+            Ok(()) => panic!("Expected error did not occur")
         }
 
-        match approved.clone().next(MilestoneEvent::Sign(
-                signing::MilestoneSignature::new(hash, 1, 0))) {
-            Ok(PendingMilestone::Approved(milestone)) => {
-                assert_eq!(milestone.get_hash(), new_milestone.get_hash());
-            },
-            Ok(_) => panic!("Pending milestone did not remain in approved state"),
-            Err(err) => panic!("Unexpected error while signing: {:?}", err)
-        }
-
-        // New Milestone incoming
-        let second_milestone_transaction = Transaction::new(hash,
-            new_milestone.get_hash(), Vec::new(), 2, 0, 1, TransactionData::Genesis
-        );
-        match approved.clone().next(MilestoneEvent::New(
-                (new_milestone.get_hash(), second_milestone_transaction.clone()))) {
-            // Because this milestone directly references the previous, it should
-            // jump directly to the signing state
-            Ok(PendingMilestone::Signing(bundle)) => {
-                assert_eq!(second_milestone_transaction.get_hash(), bundle.get_hash());
-            },
-            Ok(_) => panic!("Pending milestone did not transition to signing state"),
-            Err(err) => panic!("Unexpected error while creating new milestone: {:?}", err)
+        match raw_update(&approved, StateUpdate::Sign(
+                MilestoneSignature::new(hash, 1, 0))) {
+            Err(MilestoneError::StaleSignature) => {},
+            Err(err) => panic!("Unexpected error while adding chain: {:?}", err),
+            Ok(()) => panic!("Expected error did not occur")
         }
     }
 }

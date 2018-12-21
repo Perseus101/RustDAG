@@ -1,16 +1,13 @@
 use std::collections::HashMap;
 
 use rand::{Rng,thread_rng};
-use replace_with::replace_with_or_abort;
 
 use dag::transaction::{Transaction, data::TransactionData};
 use dag::contract::Contract;
 use dag::milestone::Milestone;
 use dag::milestone::pending::{
-    PendingMilestone,
-    MilestoneEvent,
     MilestoneSignature,
-    error::MilestoneError
+    MilestoneTracker
 };
 
 use super::incomplete_chain::IncompleteChain;
@@ -28,8 +25,7 @@ pub struct BlockDAG {
     transactions: HashMap<u64, Transaction>,
     pending_transactions: HashMap<u64, Transaction>,
     contracts: HashMap<u64, Contract>,
-    milestones: Vec<Milestone>,
-    pending_milestone: PendingMilestone,
+    milestones: MilestoneTracker,
     tips: Vec<u64>,
 }
 
@@ -43,8 +39,7 @@ impl Default for BlockDAG {
 			transactions: HashMap::new(),
             pending_transactions: HashMap::new(),
             contracts: HashMap::new(),
-            milestones: Vec::new(),
-            pending_milestone: PendingMilestone::Approved(genesis_milestone.clone()),
+            milestones: MilestoneTracker::new(genesis_milestone),
             tips: Vec::new(),
 		};
 
@@ -57,7 +52,6 @@ impl Default for BlockDAG {
         dag.pending_transactions.insert(genesis_branch_hash, genesis_branch);
         dag.tips.push(genesis_transaction_hash);
         dag.tips.push(genesis_branch_hash);
-        dag.milestones.push(genesis_milestone);
 
         dag
 	}
@@ -127,60 +121,11 @@ impl BlockDAG {
 
         if transaction.get_nonce() > MILESTONE_NONCE_MIN &&
             transaction.get_nonce() < MILESTONE_NONCE_MAX {
-            if self.create_milestone(transaction.clone()) {
+            if self.milestones.new_milestone(transaction.clone()) {
                 return TransactionStatus::Milestone;
             }
         }
         TransactionStatus::Pending
-    }
-
-    /// Take the current pending milestone and apply transform_fn to it
-    fn transform_pending_milestone<F>(&mut self, transform_fn: F)
-            where F: FnOnce(PendingMilestone) -> PendingMilestone {
-        replace_with_or_abort(&mut self.pending_milestone, transform_fn);
-        let mut maybe_milestone: Option<Milestone> = None;
-        if let PendingMilestone::Approved(milestone) = &self.pending_milestone {
-            maybe_milestone = Some(milestone.clone());
-        }
-
-        if let Some(milestone) = maybe_milestone {
-            self.confirm_transactions(milestone.get_transaction());
-            self.milestones.push(milestone);
-        }
-    }
-
-    /// Update the current pending milestone with event
-    fn update_pending_milestone(&mut self, event: MilestoneEvent)
-            -> Result<(), MilestoneError> {
-        let mut result = Ok(());
-        {
-            let error = &mut result;
-            self.transform_pending_milestone(move |pending_milestone| {
-                match pending_milestone.next(event) {
-                    Ok(pending) => pending,
-                    Err(err) => {
-                        let (pending, error_data) = err.convert();
-                        *error = Err(error_data);
-                        pending
-                    }
-                }
-            });
-        }
-        result
-    }
-
-    /// Check the validity of a milestone and add it as a pending milestone
-    ///
-    /// Walks backward on the graph searching for the previous milestone to
-    /// ensure the new milestone references the previous one
-    ///
-    /// If the milestone is added, returns true
-    fn create_milestone(&mut self, transaction: Transaction) -> bool {
-        let hash;
-        // TODO This scope should not be required with NLL
-        { hash = self.milestones[self.milestones.len() - 1].get_hash(); }
-        let event = MilestoneEvent::New((hash, transaction));
-        self.update_pending_milestone(event).is_ok()
     }
 
     /// Add a confirmed milestone to the list of milestones
@@ -193,7 +138,7 @@ impl BlockDAG {
     /// transactions that were not found locally
     pub fn verify_milestone(&self, transaction: Transaction)
             -> Result<Vec<Transaction>, IncompleteChain> {
-        let prev_milestone = &self.milestones[self.milestones.len() - 1];
+        let prev_milestone = self.milestones.get_head_milestone();
         let mut transaction_chain: Vec<Transaction> = Vec::new();
         let mut missing_hashes: Vec<u64> = Vec::new();
 
@@ -214,11 +159,10 @@ impl BlockDAG {
     /// Take a chain of milestones from the pending milestone to the previous
     /// milestone and pass them to the pending milestone state machine for
     /// confirmation
-    pub fn process_chain(&mut self, chain: Vec<Transaction>) -> bool {
+    pub fn process_chain(&mut self, milestone: u64, chain: Vec<Transaction>) -> bool {
         for transaction in chain.into_iter() {
-            if let Err(err) = self.update_pending_milestone(MilestoneEvent::Chain(transaction)) {
-                // TODO log error
-                println!("[ERROR] - process_chain - {:?}", err);
+            if let Err(_err) = self.milestones.new_chain(milestone, transaction) {
+                // TODO Log error
                 return false;
             }
         }
@@ -227,7 +171,17 @@ impl BlockDAG {
 
     /// Add a signature to the current pending milestone
     pub fn add_pending_signature(&mut self, signature: MilestoneSignature) -> bool {
-        self.update_pending_milestone(MilestoneEvent::Sign(signature)).is_ok()
+        match self.milestones.sign(signature) {
+            Ok(Some(milestone)) => {
+                self.confirm_transactions(milestone.get_transaction());
+                true
+            }
+            Ok(None) => true,
+            Err(_err) => {
+                // TODO Log error
+                false
+            }
+        }
     }
 
     /// Walk backwards from transaction, searching for a transaction specified
@@ -326,6 +280,15 @@ impl BlockDAG {
 }
 
 #[cfg(test)]
+impl BlockDAG {
+    fn force_add_transaction(&mut self, transaction: Transaction) {
+        let hash = transaction.get_hash();
+        self.pending_transactions.insert(hash, transaction);
+        self.tips.push(hash);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use dag::transaction::Transaction;
@@ -340,6 +303,14 @@ mod tests {
     const BRANCH_HASH: u64 = 6043537212972274484;
 
     const BASE_NONCE: u32 = 18722;
+
+    fn insert_transaction(dag: &mut BlockDAG, branch: u64, trunk: u64,
+            contract: u64, data: TransactionData) -> Transaction {
+        let transaction = Transaction::new(branch, trunk, Vec::new(),
+            contract, 0, 0, data);
+        dag.force_add_transaction(transaction.clone());
+        transaction
+    }
 
     #[test]
     fn test_genesis_transactions() {
@@ -379,7 +350,7 @@ mod tests {
     #[test]
     fn test_walk_search() {
         let dag = BlockDAG::default();
-        let prev_milestone = dag.milestones[dag.milestones.len() - 1].clone();
+        let prev_milestone = dag.milestones.get_head_milestone();
 
         let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![],
             0, 0, TransactionData::Genesis);
@@ -401,16 +372,15 @@ mod tests {
     #[test]
     fn test_add_milestone() {
         let mut dag = BlockDAG::default();
-        let mut key = PrivateKey::new(&SHA512_256);
         let data = TransactionData::GenContract(ContractSource::new(vec![], 0));
-        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
-            vec![], 0, BASE_NONCE, data);
-        transaction.sign(&mut key);
-        assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
+        let middle_transaction = insert_transaction(&mut dag, 0, TRUNK_HASH, 1, data.clone());
+        let transaction = insert_transaction(&mut dag, 0,
+            middle_transaction.get_hash(), 1, data);
+
         match dag.verify_milestone(transaction) {
             Ok(chain) => {
                 assert_eq!(1, chain.len());
-                assert_eq!(chain[0], dag.get_transaction(TRUNK_HASH).unwrap());
+                assert_eq!(chain[0].get_hash(), middle_transaction.get_hash());
             },
             Err(err) => panic!("Unexpected missing transactions: {:?}", err)
         }

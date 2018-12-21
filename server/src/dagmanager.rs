@@ -40,8 +40,6 @@ impl DAGManager {
 
     pub fn add_transaction(&self, transaction: Transaction) -> TransactionStatus {
         let hash = transaction.get_hash();
-        let branch_hash = transaction.get_branch_hash();
-        let trunk_hash = transaction.get_trunk_hash();
         {
             // Ignore any already known transactions
             let current_status = self.dag.read().unwrap()
@@ -64,6 +62,7 @@ impl DAGManager {
                 let dag = Arc::clone(&self.dag);
                 thread::spawn(move || {
                     let mut chain: Vec<Transaction>;
+                    let milestone_hash = transaction.get_hash();
                     {
                         // Verify milestone
                         match dag.read().unwrap().verify_milestone(transaction) {
@@ -78,15 +77,11 @@ impl DAGManager {
                         // Reverse the chain so that the elements closest to the
                         // milestone are in front
                         chain = chain.into_iter().rev().collect();
-                        println!("Hash {:?}: {:?} - {:?}", hash, trunk_hash, branch_hash);
-                        for chain_item in chain.iter() {
-                            println!("Hash {:?}: {:?} - {:?}", chain_item.get_hash(), chain_item.get_trunk_hash(), chain_item.get_branch_hash());
-                        }
                     }
                     {
                         // Add chain
                         let mut dag = dag.write().unwrap();
-                        dag.process_chain(chain);
+                        dag.process_chain(milestone_hash, chain);
                         if true {
                             // Sign all existing contracts
                             // TODO Proper signing
