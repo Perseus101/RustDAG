@@ -56,6 +56,7 @@ mod tests {
     }
 
     #[bench]
+    #[ignore]
     fn bench_proof_of_work(b: &mut test::Bencher) {
         b.iter(|| assert_eq!(136516, proof_of_work(1, 0)));
     }

@@ -2,8 +2,15 @@ use std::collections::HashMap;
 
 use rand::{Rng,thread_rng};
 
-use dag::transaction::Transaction;
+use dag::transaction::{Transaction, data::TransactionData};
+use dag::contract::Contract;
 use dag::milestone::Milestone;
+use dag::milestone::pending::{
+    MilestoneSignature,
+    MilestoneTracker
+};
+
+use super::incomplete_chain::IncompleteChain;
 
 use security::hash::proof::valid_proof;
 
@@ -17,30 +24,34 @@ const MILESTONE_NONCE_MAX: u32 = 200000;
 pub struct BlockDAG {
     transactions: HashMap<u64, Transaction>,
     pending_transactions: HashMap<u64, Transaction>,
-    milestones: Vec<Milestone>,
+    contracts: HashMap<u64, Contract>,
+    milestones: MilestoneTracker,
     tips: Vec<u64>,
 }
 
 impl Default for BlockDAG {
 	fn default() -> Self {
+        let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH,
+            vec![], 0, 0, 0, TransactionData::Genesis);
+        let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
+
 		let mut dag = BlockDAG {
 			transactions: HashMap::new(),
             pending_transactions: HashMap::new(),
-            milestones: Vec::new(),
+            contracts: HashMap::new(),
+            milestones: MilestoneTracker::new(genesis_milestone),
             tips: Vec::new(),
 		};
-        let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH, vec![], 0, 0, 0);
-        let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
 
         let genesis_transaction_hash = genesis_transaction.get_hash();
-        let genesis_branch = Transaction::new(genesis_transaction_hash, genesis_transaction_hash, vec![], 0, 0, 0);
+        let genesis_branch = Transaction::new(genesis_transaction_hash,
+            genesis_transaction_hash, vec![], 0, 0, 0, TransactionData::Genesis);
         let genesis_branch_hash = genesis_branch.get_hash();
 
         dag.transactions.insert(genesis_transaction_hash, genesis_transaction);
         dag.pending_transactions.insert(genesis_branch_hash, genesis_branch);
         dag.tips.push(genesis_transaction_hash);
         dag.tips.push(genesis_branch_hash);
-        dag.milestones.push(genesis_milestone);
 
         dag
 	}
@@ -74,6 +85,27 @@ impl BlockDAG {
         // Verify the transaction's signature
         if !transaction.verify() { return TransactionStatus::Rejected; }
 
+        let hash = transaction.get_hash();
+
+        match transaction.get_data() {
+            TransactionData::Genesis => {
+                return TransactionStatus::Rejected;
+            },
+            TransactionData::GenContract(src) => {
+                // Generate a new contract
+                self.contracts.insert(hash, From::from(src.clone()));
+            },
+            TransactionData::ExecContract(result) => {
+                // Execute the function on the contract
+                if let Some(contract) = self.contracts.get_mut(&transaction.get_contract()) {
+                    if let Err(_) = contract.apply(result.clone()) {
+                        return TransactionStatus::Rejected;
+                    }
+                }
+                else { return TransactionStatus::Rejected; }
+            }
+        }
+
         for hash in transaction.get_ref_hashes() {
             if let Some(t) = self.get_transaction(hash) {
                 referenced.push(t);
@@ -84,34 +116,71 @@ impl BlockDAG {
         for t in referenced {
             self.tips.remove_item(&t.get_hash());
         }
-        let hash = transaction.get_hash();
         self.pending_transactions.insert(hash, transaction.clone());
         self.tips.push(hash);
 
         if transaction.get_nonce() > MILESTONE_NONCE_MIN &&
             transaction.get_nonce() < MILESTONE_NONCE_MAX {
-            if self.add_milestone(transaction.clone()) {
+            if self.milestones.new_milestone(transaction.clone()) {
                 return TransactionStatus::Milestone;
             }
         }
         TransactionStatus::Pending
     }
 
-    /// Try to add a milestone
+    /// Add a confirmed milestone to the list of milestones
     ///
-    /// Walks backward on the graph searching for the previous milestone to
-    /// ensure the new milestone references the previous one
+    /// Walks backward on the graph searching for the previous milestone
     ///
-    /// If the milestone is added, returns true
-    fn add_milestone(&mut self, transaction: Transaction) -> bool {
-        let prev_milestone = self.milestones[self.milestones.len() - 1].clone();
-        if self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp()) {
-            self.confirm_transactions(&transaction);
-            self.milestones.push(Milestone::new(prev_milestone.get_hash(), transaction));
-            true
+    /// If the milestone is found, return the chain of transactions to it
+    ///
+    /// If the milestone is not found, return and IncompleteChain error with any
+    /// transactions that were not found locally
+    pub fn verify_milestone(&self, transaction: Transaction)
+            -> Result<Vec<Transaction>, IncompleteChain> {
+        let prev_milestone = self.milestones.get_head_milestone();
+        let mut transaction_chain: Vec<Transaction> = Vec::new();
+        let mut missing_hashes: Vec<u64> = Vec::new();
+
+        if self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp(),
+                &mut |transaction: &Transaction| {
+                    transaction_chain.push(transaction.clone());
+                },
+                &mut |hash: u64| {
+                    missing_hashes.push(hash);
+                }) {
+            Ok(transaction_chain)
         }
         else {
-            false
+            Err(IncompleteChain::new(missing_hashes))
+        }
+    }
+
+    /// Take a chain of milestones from the pending milestone to the previous
+    /// milestone and pass them to the pending milestone state machine for
+    /// confirmation
+    pub fn process_chain(&mut self, milestone: u64, chain: Vec<Transaction>) -> bool {
+        for transaction in chain.into_iter() {
+            if let Err(_err) = self.milestones.new_chain(milestone, transaction) {
+                // TODO Log error
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Add a signature to the current pending milestone
+    pub fn add_pending_signature(&mut self, signature: MilestoneSignature) -> bool {
+        match self.milestones.sign(signature) {
+            Ok(Some(milestone)) => {
+                self.confirm_transactions(milestone.get_transaction());
+                true
+            }
+            Ok(None) => true,
+            Err(_err) => {
+                // TODO Log error
+                false
+            }
         }
     }
 
@@ -119,18 +188,26 @@ impl BlockDAG {
     /// by hash. Stops at any transaction that occurred before timestamp
     ///
     /// If the transaction is found, returns true
-    fn walk_search(&self, transaction: &Transaction, hash: u64, timestamp: u64) -> bool {
+    fn walk_search<F, G>(&self, transaction: &Transaction, hash: u64,
+            timestamp: u64, chain_function: &mut F, not_found_function: &mut G) -> bool
+            where F: FnMut(&Transaction), G: FnMut(u64) {
         if transaction.get_timestamp() < timestamp {
             return false;
         }
         for transaction_hash in transaction.get_all_refs() {
             if let Some(transaction) = self.get_transaction(transaction_hash) {
                 if transaction_hash == hash {
+                    // This is the transaction we are looking for, return
                     return true;
                 }
-                if self.walk_search(&transaction, hash, timestamp) {
+                if self.walk_search(&transaction, hash, timestamp, chain_function, not_found_function) {
+                    // Found the transaction somewhere along this chain
+                    chain_function(&transaction);
                     return true;
                 }
+            }
+            else {
+                not_found_function(transaction_hash);
             }
         }
         false
@@ -195,22 +272,45 @@ impl BlockDAG {
 
         TransactionHashes::new(trunk_tip, branch_tip)
     }
+
+    // Get the hash id's of all the contracts stored on the dag
+    pub fn get_contracts(&self) -> Vec<u64> {
+        self.contracts.keys().map(|x| *x).collect()
+    }
+}
+
+#[cfg(test)]
+impl BlockDAG {
+    fn force_add_transaction(&mut self, transaction: Transaction) {
+        let hash = transaction.get_hash();
+        self.pending_transactions.insert(hash, transaction);
+        self.tips.push(hash);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use dag::transaction::Transaction;
+    use dag::contract::source::ContractSource;
 
     use security::keys::PrivateKey;
     use security::ring::digest::SHA512_256;
 
     // Hardcoded values for the hashes of the genesis transactions.
     // If the default genesis transactions change, these values must be updated.
-    const TRUNK_HASH: u64 = 9160162714596186031;
-    const BRANCH_HASH: u64 = 6508967370193414217;
+    const TRUNK_HASH: u64 = 18437817136469695293;
+    const BRANCH_HASH: u64 = 6043537212972274484;
 
     const BASE_NONCE: u32 = 18722;
+
+    fn insert_transaction(dag: &mut BlockDAG, branch: u64, trunk: u64,
+            contract: u64, data: TransactionData) -> Transaction {
+        let transaction = Transaction::new(branch, trunk, Vec::new(),
+            contract, 0, 0, data);
+        dag.force_add_transaction(transaction.clone());
+        transaction
+    }
 
     #[test]
     fn test_genesis_transactions() {
@@ -230,47 +330,60 @@ mod tests {
     fn test_add_transaction() {
         let mut dag = BlockDAG::default();
         let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], BASE_NONCE);
+        let data = TransactionData::GenContract(ContractSource::new(vec![], 0));
+        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
+            vec![], 0, BASE_NONCE, data);
         transaction.sign(&mut key);
         assert!(transaction.verify());
         assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
 
-        {
-            let tips = dag.get_tips();
-            assert_eq!(tips.trunk_hash, transaction.get_hash());
-            assert_eq!(tips.branch_hash, transaction.get_branch_hash());
-        }
+        let tips = dag.get_tips();
+        assert_eq!(tips.trunk_hash, transaction.get_hash());
+        assert_eq!(tips.branch_hash, transaction.get_branch_hash());
+        drop(tips);
 
-        let bad_transaction = Transaction::create(10, BRANCH_HASH, vec![], 0);
+        let bad_transaction = Transaction::create(10, BRANCH_HASH, vec![], 0, 0,
+            TransactionData::Genesis);
         assert_eq!(dag.add_transaction(&bad_transaction), TransactionStatus::Rejected);
     }
 
     #[test]
     fn test_walk_search() {
         let dag = BlockDAG::default();
-        let prev_milestone = dag.milestones[dag.milestones.len() - 1].clone();
+        let prev_milestone = dag.milestones.get_head_milestone();
 
-        let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], 0);
-        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![],
+            0, 0, TransactionData::Genesis);
+        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
 
-        let transaction = Transaction::create(TRUNK_HASH, 0, vec![], 0);
-        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        let transaction = Transaction::create(TRUNK_HASH, 0, vec![], 0, 0,
+            TransactionData::Genesis);
+        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
 
-        let transaction = Transaction::create(0, BRANCH_HASH, vec![], 0);
-        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        let transaction = Transaction::create(0, BRANCH_HASH, vec![], 0, 0,
+            TransactionData::Genesis);
+        assert!(dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
 
-        let transaction = Transaction::create(0, 0, vec![], 0);
-        assert!(!dag.walk_search(&transaction, prev_milestone.get_hash(), 0));
+        let transaction = Transaction::create(0, 0, vec![], 0, 0,
+            TransactionData::Genesis);
+        assert!(!dag.walk_search(&transaction, prev_milestone.get_hash(), 0, &mut |_| {}, &mut |_| {}));
     }
 
     #[test]
     fn test_add_milestone() {
         let mut dag = BlockDAG::default();
-        let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], BASE_NONCE);
-        transaction.sign(&mut key);
-        assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
-        assert!(dag.add_milestone(transaction));
+        let data = TransactionData::GenContract(ContractSource::new(vec![], 0));
+        let middle_transaction = insert_transaction(&mut dag, 0, TRUNK_HASH, 1, data.clone());
+        let transaction = insert_transaction(&mut dag, 0,
+            middle_transaction.get_hash(), 1, data);
+
+        match dag.verify_milestone(transaction) {
+            Ok(chain) => {
+                assert_eq!(1, chain.len());
+                assert_eq!(chain[0].get_hash(), middle_transaction.get_hash());
+            },
+            Err(err) => panic!("Unexpected missing transactions: {:?}", err)
+        }
     }
 
     #[test]
@@ -281,10 +394,11 @@ mod tests {
         assert_eq!(dag.get_confirmation_status(10), TransactionStatus::Rejected);
 
         let mut key = PrivateKey::new(&SHA512_256);
-        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![], BASE_NONCE);
+        let data = TransactionData::GenContract(ContractSource::new(vec![], 0));
+        let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
+            vec![], 0, BASE_NONCE, data);
         transaction.sign(&mut key);
         assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
         assert_eq!(dag.get_confirmation_status(transaction.get_hash()), TransactionStatus::Pending);
-
     }
 }

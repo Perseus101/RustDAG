@@ -21,4 +21,8 @@ impl Milestone {
     pub fn get_timestamp(&self) -> u64 {
         self.transaction.get_timestamp()
     }
+
+    pub fn get_transaction(&self) -> &Transaction {
+        &self.transaction
+    }
 }
