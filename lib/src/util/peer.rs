@@ -16,7 +16,7 @@ enum TransactionRequest {
 impl RestPath<TransactionRequest> for Transaction {
     fn get_path(param: TransactionRequest) -> Result<String,Error> {
         match param {
-            TransactionRequest::GET(hash) => Ok(format!("transaction/get/{}", hash)),
+            TransactionRequest::GET(hash) => Ok(format!("transaction/{}", hash)),
             TransactionRequest::POST() => Ok(String::from("transaction"))
         }
     }
