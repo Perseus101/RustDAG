@@ -1,4 +1,10 @@
 use std::hash::{Hash,Hasher};
+use std::fmt;
+
+use serde::{
+    ser::{Serialize, Serializer, SerializeStruct},
+    de::{self, Deserialize, Deserializer, Visitor, SeqAccess, MapAccess, Unexpected}
+};
 
 use security::hash::hasher::Sha3Hasher;
 use security::keys::{PrivateKey,PublicKey};
@@ -8,7 +14,7 @@ use util::epoch_time;
 
 use dag::transaction::data::TransactionData;
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Transaction {
     branch_transaction: u64,
     trunk_transaction: u64,
@@ -48,6 +54,23 @@ impl Transaction {
             nonce,
             data
         )
+    }
+
+    pub fn raw(branch_transaction: u64, trunk_transaction: u64,
+            ref_transactions: Vec<u64>, contract: u64, timestamp: u64,
+            nonce: u32, address: Vec<u8>, signature: Vec<u8>,
+            data: TransactionData) -> Self {
+        Transaction {
+            branch_transaction: branch_transaction,
+            trunk_transaction: trunk_transaction,
+            ref_transactions: ref_transactions,
+            contract: contract,
+            timestamp: timestamp,
+            nonce: nonce,
+            address: address,
+            signature: signature,
+            data: data,
+        }
     }
 
     pub fn get_trunk_hash(&self) -> u64 {
@@ -92,6 +115,14 @@ impl Transaction {
         &self.data
     }
 
+    pub fn get_address(&self) -> &[u8] {
+        &self.address
+    }
+
+    pub fn get_signature(&self) -> &[u8] {
+        &self.signature
+    }
+
     pub fn sign(&mut self, key: &mut PrivateKey) {
         let mut s = Sha3Hasher::new();
         self.hash(&mut s);
@@ -127,6 +158,199 @@ impl Hash for Transaction {
         self.ref_transactions.hash(state);
         self.timestamp.hash(state);
         self.nonce.hash(state);
+    }
+}
+
+impl Serialize for Transaction {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // 9 fields in the struct
+        let mut state = serializer.serialize_struct("Transaction", 9)?;
+        // Serialize fields
+        state.serialize_field("branch_transaction", &self.branch_transaction)?;
+        state.serialize_field("trunk_transaction", &self.trunk_transaction)?;
+        state.serialize_field("ref_transactions", &self.ref_transactions)?;
+        state.serialize_field("contract", &self.contract)?;
+        state.serialize_field("timestamp", &self.timestamp)?;
+        state.serialize_field("nonce", &self.nonce)?;
+
+        // Serialize address and signature as base64 strings
+        state.serialize_field("address",
+            &base64::encode_config(&self.address, base64::URL_SAFE))?;
+        state.serialize_field("signature",
+            &base64::encode_config(&self.signature, base64::URL_SAFE))?;
+
+        state.serialize_field("data", &self.data)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Transaction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[allow(non_camel_case_types)]
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Branch_Transaction,
+            Trunk_Transaction,
+            Ref_Transactions,
+            Contract,
+            Timestamp,
+            Nonce,
+            Address,
+            Signature,
+            Data,
+        }
+
+        struct TransactionVisitor;
+
+        impl<'de> Visitor<'de> for TransactionVisitor {
+            type Value = Transaction;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct Transaction")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Transaction, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                let branch_transaction = seq.next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let trunk_transaction = seq.next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                let ref_transactions = seq.next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+                let contract = seq.next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
+                let timestamp = seq.next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+                let nonce = seq.next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+                let address = base64::decode_config(&seq.next_element::<String>()?
+                    .ok_or_else(|| de::Error::invalid_length(6, &self))?, base64::URL_SAFE)
+                    .map_err(|_| { de::Error::invalid_value(Unexpected::Str(&"address"), &"valid base64 string")})?;
+                let signature = base64::decode_config(&seq.next_element::<String>()?
+                    .ok_or_else(|| de::Error::invalid_length(7, &self))?, base64::URL_SAFE)
+                    .map_err(|_| { de::Error::invalid_value(Unexpected::Str(&"signature"), &"valid base64 string")})?;
+                let data = seq.next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(8, &self))?;
+
+                Ok(Transaction::raw(branch_transaction, trunk_transaction, ref_transactions,
+                    contract, timestamp, nonce, address, signature, data))
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Transaction, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut branch_transaction = None;
+                let mut trunk_transaction = None;
+                let mut ref_transactions = None;
+                let mut contract = None;
+                let mut timestamp = None;
+                let mut nonce = None;
+                let mut address = None;
+                let mut signature = None;
+                let mut data = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Branch_Transaction => {
+                            if branch_transaction.is_some() {
+                                return Err(de::Error::duplicate_field("branch_transaction"));
+                            }
+                            branch_transaction = Some(map.next_value()?);
+                        },
+                        Field::Trunk_Transaction => {
+                            if trunk_transaction.is_some() {
+                                return Err(de::Error::duplicate_field("trunk_transaction"));
+                            }
+                            trunk_transaction = Some(map.next_value()?);
+                        },
+                        Field::Ref_Transactions => {
+                            if ref_transactions.is_some() {
+                                return Err(de::Error::duplicate_field("ref_transactions"));
+                            }
+                            ref_transactions = Some(map.next_value()?);
+                        },
+                        Field::Contract => {
+                            if contract.is_some() {
+                                return Err(de::Error::duplicate_field("contract"));
+                            }
+                            contract = Some(map.next_value()?);
+                        },
+                        Field::Timestamp => {
+                            if timestamp.is_some() {
+                                return Err(de::Error::duplicate_field("timestamp"));
+                            }
+                            timestamp = Some(map.next_value()?);
+                        },
+                        Field::Nonce => {
+                            if nonce.is_some() {
+                                return Err(de::Error::duplicate_field("nonce"));
+                            }
+                            nonce = Some(map.next_value()?);
+                        },
+                        Field::Address => {
+                            if address.is_some() {
+                                return Err(de::Error::duplicate_field("address"));
+                            }
+                            address = Some(base64::decode_config(
+                                &map.next_value::<String>()?, base64::URL_SAFE)
+                                .map_err(|_| {de::Error::invalid_value(
+                                    Unexpected::Str(&"address"), &"valid base64 string")})?);
+                        },
+                        Field::Signature => {
+                            if signature.is_some() {
+                                return Err(de::Error::duplicate_field("signature"));
+                            }
+                            signature = Some(base64::decode_config(
+                                &map.next_value::<String>()?, base64::URL_SAFE)
+                                .map_err(|_| {de::Error::invalid_value(
+                                    Unexpected::Str(&"signature"), &"valid base64 string")})?);
+                        },
+                        Field::Data => {
+                            if data.is_some() {
+                                return Err(de::Error::duplicate_field("data"));
+                            }
+                            data = Some(map.next_value()?);
+                        },
+                    }
+                }
+
+                let branch_transaction = branch_transaction.ok_or_else(|| de::Error::duplicate_field("branch_transaction"))?;
+                let trunk_transaction = trunk_transaction.ok_or_else(|| de::Error::duplicate_field("trunk_transaction"))?;
+                let ref_transactions = ref_transactions.ok_or_else(|| de::Error::duplicate_field("ref_transactions"))?;
+                let contract = contract.ok_or_else(|| de::Error::duplicate_field("contract"))?;
+                let timestamp = timestamp.ok_or_else(|| de::Error::duplicate_field("timestamp"))?;
+                let nonce = nonce.ok_or_else(|| de::Error::duplicate_field("nonce"))?;
+                let address = address.ok_or_else(|| de::Error::duplicate_field("address"))?;
+                let signature = signature.ok_or_else(|| de::Error::duplicate_field("signature"))?;
+                let data = data.ok_or_else(|| de::Error::duplicate_field("data"))?;
+
+                Ok(Transaction::raw(branch_transaction, trunk_transaction, ref_transactions,
+                    contract, timestamp, nonce, address, signature, data))
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &[
+            "branch_transaction",
+            "trunk_transaction",
+            "ref_transactions",
+            "contract",
+            "timestamp",
+            "nonce",
+            "address",
+            "signature",
+            "data",
+        ];
+        deserializer.deserialize_struct("Transaction", FIELDS, TransactionVisitor)
     }
 }
 
@@ -174,4 +398,54 @@ mod tests {
         transaction.sign(&mut key);
         assert!(transaction.verify());
     }
+
+    #[test]
+    fn test_serialize() {
+        let transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis);
+        let json_value = json!({
+            "branch_transaction": 0,
+            "trunk_transaction": 1,
+            "ref_transactions": vec![2],
+            "contract": 3,
+            "timestamp": 4,
+            "nonce": 5,
+            "address": "",
+            "signature": base64::encode_config(&vec![0; 8192], base64::URL_SAFE),
+            "data": TransactionData::Genesis
+        });
+        assert_eq!(json_value, serde_json::to_value(transaction).unwrap());
+    }
+
+    #[test]
+    fn test_deserialize() {
+        let transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis);
+        let json_value = json!({
+            "branch_transaction": 0,
+            "trunk_transaction": 1,
+            "ref_transactions": vec![2],
+            "contract": 3,
+            "timestamp": 4,
+            "nonce": 5,
+            "address": "",
+            "signature": base64::encode_config(&vec![0; 8192], base64::URL_SAFE),
+            "data": TransactionData::Genesis
+        });
+        assert_eq!(transaction, serde_json::from_value(json_value).unwrap());
+    }
+
+    #[test]
+    fn test_serialize_deserialize() {
+        // Check the transaction is identical after serializing and deserializing
+        let transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis);
+        let json_value = serde_json::to_value(transaction.clone()).unwrap();
+        assert_eq!(transaction, serde_json::from_value(json_value).unwrap());
+
+        // Check a signed transaction is identical after serializing and deserializing
+        let mut signed_transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis);
+        let mut key = PrivateKey::new(&SHA512_256);
+        signed_transaction.sign(&mut key);
+        let signed_json_value = serde_json::to_value(signed_transaction.clone()).unwrap();
+        assert_eq!(signed_transaction, serde_json::from_value(signed_json_value).unwrap());
+    }
+
 }

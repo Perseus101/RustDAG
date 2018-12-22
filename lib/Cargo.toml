@@ -14,6 +14,7 @@ ring = "0.13.5"
 lamport_sigs = "0.6.0"
 rand = "0.5.3"
 replace_with = "0.1.2"
+base64 = "0.10.0"
 
 [lib]
 name = "rustdag_lib"
