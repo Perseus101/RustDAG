@@ -1,12 +1,16 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Convert byte slice to hex string
-pub fn bytes_as_string(bytes: &[u8]) -> String {
-    let string_reps: Vec<String> = bytes.into_iter().map(|b| format!("{:02X}", b)).collect();
-    string_reps.join("")
+/// Convert u64 to hex string
+pub fn u64_as_hex_string(val: u64) -> String {
+    format!("{:016x}", val)
 }
 
-/// Get
+/// Convert u32 to hex string
+pub fn u32_as_hex_string(val: u32) -> String {
+    format!("{:08x}", val)
+}
+
+/// Get time since epoch
 pub fn epoch_time() -> u64 {
     let start = SystemTime::now();
     let epoch_duration = start.duration_since(UNIX_EPOCH).expect("Negative time delta");
@@ -21,16 +25,24 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn test_bytes_as_string() {
-        assert_eq!("000102030405060708090A0B0C0D0E0F",
-            bytes_as_string(&[
-                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
-            ]));
-        assert_eq!("00", bytes_as_string(&[ 0x00 ]));
+    fn test_u64_as_hex_string() {
+        assert_eq!(u64_as_hex_string(0), "0000000000000000");
+        assert_eq!(u64_as_hex_string(16), "0000000000000010");
+        assert_eq!(u64_as_hex_string(6043537212972274484), "53def5133e111334");
+        assert_eq!(u64_as_hex_string(18437817136469695293), "ffe048ff74e2db3d");
+        assert_eq!(u64_as_hex_string(18446744073709551615), "ffffffffffffffff");
     }
 
     #[test]
-    pub fn test_epoch_time() {
+    fn test_u32_as_hex_string() {
+        assert_eq!(u32_as_hex_string(0), "00000000");
+        assert_eq!(u32_as_hex_string(16), "00000010");
+        assert_eq!(u32_as_hex_string(2568797931), "991cbeeb");
+        assert_eq!(u32_as_hex_string(4294967295), "ffffffff");
+    }
+
+    #[test]
+    fn test_epoch_time() {
         use std::time::Duration;
         use std::thread;
 
