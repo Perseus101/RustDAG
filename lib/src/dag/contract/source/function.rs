@@ -79,7 +79,7 @@ impl ContractFunction {
     ///
     /// # Examples
     /// TODO
-    pub fn exec(&self, state: &ContractState, args: &Vec<u8>)
+    pub fn exec(&self, state: &ContractState, args: &[u8])
             -> Result<Vec<u8>, ArgLenMismatchError> {
         if args.len() != self.argc {
             return Err(ArgLenMismatchError);
@@ -124,7 +124,7 @@ pub struct _MemMap {
 }
 
 impl _MemMap {
-    fn new(argv: &Vec<u8>, stack_size: usize, state: &ContractState) -> Self {
+    fn new(argv: &[u8], stack_size: usize, state: &ContractState) -> Self {
         let mut mem = vec![0; argv.len() + stack_size + state.len()];
         mem[..argv.len()].copy_from_slice(argv);
         mem[(argv.len() + stack_size)..].copy_from_slice(&state.as_slice());

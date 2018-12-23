@@ -33,10 +33,10 @@ impl SigningState {
             hash
         }).collect();
         SigningState {
-            transaction: transaction,
-            previous_milestone: previous_milestone,
-            transaction_chain: transaction_chain,
-            signatures: signatures
+            transaction,
+            previous_milestone,
+            transaction_chain,
+            signatures
         }
     }
 
@@ -49,14 +49,14 @@ impl PendingMilestoneState for SigningState {
     fn next(mut self, event: &StateUpdate)
             -> Result<PendingMilestone, _MilestoneErrorTag> {
         match event {
-            StateUpdate::Chain(_) => Err(_MilestoneErrorTag::StaleChain(PendingMilestone::Signing(self))),
+            StateUpdate::Chain(_) => Err(_MilestoneErrorTag::StaleChain(PendingMilestone::Signing(Box::new(self)))),
             StateUpdate::Sign(signature) => {
                 self.sign(signature);
                 if self.signatures.values().all(|value| *value) {
                     Ok(PendingMilestone::Approved(Milestone::new(self.previous_milestone, self.transaction)))
                 }
                 else {
-                    Ok(PendingMilestone::Signing(self))
+                    Ok(PendingMilestone::Signing(Box::new(self)))
                 }
             }
         }

@@ -61,15 +61,15 @@ impl Transaction {
             nonce: u32, address: Vec<u8>, signature: Vec<u8>,
             data: TransactionData) -> Self {
         Transaction {
-            branch_transaction: branch_transaction,
-            trunk_transaction: trunk_transaction,
-            ref_transactions: ref_transactions,
-            contract: contract,
-            timestamp: timestamp,
-            nonce: nonce,
-            address: address,
-            signature: signature,
-            data: data,
+            branch_transaction,
+            trunk_transaction,
+            ref_transactions,
+            contract,
+            timestamp,
+            nonce,
+            address,
+            signature,
+            data,
         }
     }
 
@@ -339,7 +339,7 @@ impl<'de> Deserialize<'de> for Transaction {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "branch_transaction",
             "trunk_transaction",
             "ref_transactions",

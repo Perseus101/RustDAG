@@ -183,8 +183,8 @@ impl PendingState {
     pub fn new(transaction: Transaction, previous_milestone: Milestone) -> Self {
         PendingState {
             head: MilestoneChainData::new(&transaction),
-            transaction: transaction,
-            previous_milestone: previous_milestone
+            transaction,
+            previous_milestone
         }
     }
 }
@@ -196,16 +196,16 @@ impl PendingMilestoneState for PendingState {
             StateUpdate::Chain(transaction) => {
                 match self.head.insert(transaction, &self.previous_milestone) {
                     Ok(Some(chain)) => {
-                        Ok(PendingMilestone::Signing(SigningState::new(self.transaction,
-                            self.previous_milestone.get_hash(),chain)))
+                        Ok(PendingMilestone::Signing(Box::new(SigningState::new(self.transaction,
+                            self.previous_milestone.get_hash(),chain))))
                     },
                     Ok(None) => {
-                        Ok(PendingMilestone::Pending(self))
+                        Ok(PendingMilestone::Pending(Box::new(self)))
                     },
-                    Err(err) => Err(err.convert(PendingMilestone::Pending(self)))
+                    Err(err) => Err(err.convert(PendingMilestone::Pending(Box::new(self))))
                 }
             },
-            StateUpdate::Sign(_) => Err(_MilestoneErrorTag::StaleSignature(PendingMilestone::Pending(self)))
+            StateUpdate::Sign(_) => Err(_MilestoneErrorTag::StaleSignature(PendingMilestone::Pending(Box::new(self))))
         }
     }
 }

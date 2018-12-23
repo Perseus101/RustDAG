@@ -18,8 +18,8 @@ use util::types::{TransactionHashes,TransactionStatus};
 
 const GENESIS_HASH: u64 = 0;
 
-const MILESTONE_NONCE_MIN: u32 = 100000;
-const MILESTONE_NONCE_MAX: u32 = 200000;
+const MILESTONE_NONCE_MIN: u32 = 100_000;
+const MILESTONE_NONCE_MAX: u32 = 200_000;
 
 pub struct BlockDAG {
     transactions: HashMap<u64, Transaction>,
@@ -98,7 +98,7 @@ impl BlockDAG {
             TransactionData::ExecContract(result) => {
                 // Execute the function on the contract
                 if let Some(contract) = self.contracts.get_mut(&transaction.get_contract()) {
-                    if let Err(_) = contract.apply(result.clone()) {
+                    if contract.apply(result.clone()).is_err() {
                         return TransactionStatus::Rejected;
                     }
                 }
@@ -120,10 +120,9 @@ impl BlockDAG {
         self.tips.push(hash);
 
         if transaction.get_nonce() > MILESTONE_NONCE_MIN &&
-            transaction.get_nonce() < MILESTONE_NONCE_MAX {
-            if self.milestones.new_milestone(transaction.clone()) {
+            transaction.get_nonce() < MILESTONE_NONCE_MAX &&
+            self.milestones.new_milestone(transaction.clone()) {
                 return TransactionStatus::Milestone;
-            }
         }
         TransactionStatus::Pending
     }
@@ -142,13 +141,18 @@ impl BlockDAG {
         let mut transaction_chain: Vec<Transaction> = Vec::new();
         let mut missing_hashes: Vec<u64> = Vec::new();
 
-        if self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp(),
-                &mut |transaction: &Transaction| {
-                    transaction_chain.push(transaction.clone());
-                },
-                &mut |hash: u64| {
-                    missing_hashes.push(hash);
-                }) {
+        let transaction_found = {
+            let chain_function = &mut |transaction: &Transaction| {
+                transaction_chain.push(transaction.clone());
+            };
+            let not_found_function = &mut |hash: u64| {
+                missing_hashes.push(hash);
+            };
+
+            self.walk_search(&transaction, prev_milestone.get_hash(), prev_milestone.get_timestamp(), chain_function, not_found_function)
+        };
+
+        if transaction_found {
             Ok(transaction_chain)
         }
         else {
@@ -236,10 +240,10 @@ impl BlockDAG {
 
     /// Get the confirmation status of a transaction specified by hash
     pub fn get_confirmation_status(&self, hash: u64) -> TransactionStatus {
-        if let Some(_) = self.pending_transactions.get(&hash) {
+        if self.pending_transactions.get(&hash).is_some() {
             return TransactionStatus::Pending;
         }
-        if let Some(_) = self.transactions.get(&hash) {
+        if self.transactions.get(&hash).is_some() {
             return TransactionStatus::Accepted;
         }
         TransactionStatus::Rejected
@@ -251,9 +255,7 @@ impl BlockDAG {
     /// transaction. Any transaction with no transactions referencing it is
     /// considered a tip.
     pub fn get_tips(&self) -> TransactionHashes {
-        let trunk_tip;
-        let branch_tip;
-        if self.tips.len() > 1 {
+        let (trunk_tip, branch_tip) = if self.tips.len() > 1 {
             // Randomly select two unique transactions from the tips
             let mut rng = thread_rng();
             let trunk_tip_idx = rng.gen_range(0, self.tips.len());
@@ -262,20 +264,19 @@ impl BlockDAG {
                 branch_tip_idx = rng.gen_range(0, self.tips.len());
             }
 
-            trunk_tip = self.tips[trunk_tip_idx];
-            branch_tip = self.tips[branch_tip_idx];
+            (self.tips[trunk_tip_idx], self.tips[branch_tip_idx])
         }
         else {
-            trunk_tip = self.tips[0];
-            branch_tip = self.get_transaction(trunk_tip).unwrap().get_branch_hash();
-        }
+            let trunk_tip = self.tips[0];
+            (trunk_tip, self.get_transaction(trunk_tip).unwrap().get_branch_hash())
+        };
 
         TransactionHashes::new(trunk_tip, branch_tip)
     }
 
     // Get the hash id's of all the contracts stored on the dag
     pub fn get_contracts(&self) -> Vec<u64> {
-        self.contracts.keys().map(|x| *x).collect()
+        self.contracts.keys().cloned().collect()
     }
 }
 

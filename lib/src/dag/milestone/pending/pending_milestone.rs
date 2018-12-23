@@ -24,8 +24,8 @@ use super::state::{
 /// Once a milestone enters the Approved state, it is considered confirmed.
 #[derive(Clone)]
 pub enum PendingMilestone {
-    Pending(PendingState),
-    Signing(SigningState),
+    Pending(Box<PendingState>),
+    Signing(Box<SigningState>),
     Approved(Milestone),
 }
 
@@ -38,10 +38,10 @@ impl PendingMilestone {
             let transaction_chain = vec![
                 (transaction.get_hash(), transaction.get_contract())
             ];
-            PendingMilestone::Signing(SigningState::new(transaction, milestone_hash, transaction_chain))
+            PendingMilestone::Signing(Box::new(SigningState::new(transaction, milestone_hash, transaction_chain)))
         }
         else {
-            PendingMilestone::Pending(PendingState::new(transaction, previous_milestone))
+            PendingMilestone::Pending(Box::new(PendingState::new(transaction, previous_milestone)))
         }
     }
 

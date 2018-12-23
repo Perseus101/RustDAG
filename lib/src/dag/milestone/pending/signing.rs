@@ -13,10 +13,10 @@ pub struct MilestoneSignature {
 impl MilestoneSignature {
     pub fn new(milestone: u64, contract: u64, next_key: u64) -> Self {
         MilestoneSignature {
-            milestone: milestone,
-            contract: contract,
+            milestone,
+            contract,
             pub_key: MilestonePubKey {},
-            next_key: next_key
+            next_key
         }
     }
 
