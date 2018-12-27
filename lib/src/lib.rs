@@ -12,6 +12,8 @@ extern crate rand;
 extern crate replace_with;
 extern crate base64;
 
+extern crate wasmi;
+
 pub mod dag;
 pub mod security;
 pub mod util;

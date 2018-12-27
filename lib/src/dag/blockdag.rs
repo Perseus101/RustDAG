@@ -93,16 +93,12 @@ impl BlockDAG {
             },
             TransactionData::GenContract(src) => {
                 // Generate a new contract
-                self.contracts.insert(hash, From::from(src.clone()));
+                self.contracts.insert(hash, src.clone().into());
             },
-            TransactionData::ExecContract(result) => {
+            TransactionData::ExecContract => {
                 // Execute the function on the contract
-                if let Some(contract) = self.contracts.get_mut(&transaction.get_contract()) {
-                    if let Err(_) = contract.apply(result.clone()) {
-                        return TransactionStatus::Rejected;
-                    }
-                }
-                else { return TransactionStatus::Rejected; }
+                // TODO
+                return TransactionStatus::Rejected;
             }
         }
 
@@ -330,7 +326,7 @@ mod tests {
     fn test_add_transaction() {
         let mut dag = BlockDAG::default();
         let mut key = PrivateKey::new(&SHA512_256);
-        let data = TransactionData::GenContract(ContractSource::new(vec![], 0));
+        let data = TransactionData::GenContract(ContractSource::new(&vec![]));
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
             vec![], 0, BASE_NONCE, data);
         transaction.sign(&mut key);
@@ -372,7 +368,7 @@ mod tests {
     #[test]
     fn test_add_milestone() {
         let mut dag = BlockDAG::default();
-        let data = TransactionData::GenContract(ContractSource::new(vec![], 0));
+        let data = TransactionData::GenContract(ContractSource::new(&vec![]));
         let middle_transaction = insert_transaction(&mut dag, 0, TRUNK_HASH, 1, data.clone());
         let transaction = insert_transaction(&mut dag, 0,
             middle_transaction.get_hash(), 1, data);
@@ -394,7 +390,7 @@ mod tests {
         assert_eq!(dag.get_confirmation_status(10), TransactionStatus::Rejected);
 
         let mut key = PrivateKey::new(&SHA512_256);
-        let data = TransactionData::GenContract(ContractSource::new(vec![], 0));
+        let data = TransactionData::GenContract(ContractSource::new(&vec![]));
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
             vec![], 0, BASE_NONCE, data);
         transaction.sign(&mut key);

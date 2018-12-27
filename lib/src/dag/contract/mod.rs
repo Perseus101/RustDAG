@@ -1,7 +1,6 @@
 pub mod source;
 pub mod state;
-pub mod result;
-pub mod errors;
+pub mod error;
 
 mod contract;
 pub use self::contract::Contract;
