@@ -90,8 +90,8 @@ impl Contract {
         &self.state
     }
 
-    pub fn writeback(&mut self, cache: PersistentCachedContractState) {
-        cache.writeback(&mut self.state);
+    pub fn writeback(&mut self, cache: PersistentCachedContractState) -> Result<(), ContractError> {
+        cache.writeback(&mut self.state)
     }
 
     fn exec_from_cached_state(&self, func_name: &str, args: &[ContractValue], mut state: CachedContractState)
@@ -181,7 +181,7 @@ mod tests {
                 ContractValue::U64(0)]).unwrap().0);
 
         // Write back cache and assert values are changed
-        contract.writeback(persisted);
+        contract.writeback(persisted).expect("Error while writing cached changes");
         assert_eq!(Some(ContractValue::U32(2)),
             contract.exec("get_u32", &[ContractValue::U32(0)]).unwrap().0);
         assert_eq!(Some(ContractValue::U64(2)),

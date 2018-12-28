@@ -11,7 +11,7 @@ use dag::contract::{ContractValue, error::ContractError};
 use super::ContractState;
 use super::persistent::PersistentCachedContractState;
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum StateIndex {
     U32(u32),
     U64(u32),

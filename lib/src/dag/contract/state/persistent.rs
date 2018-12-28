@@ -9,6 +9,7 @@ use dag::contract::{ContractValue, error::ContractError};
 ///
 /// This struct is used to persist a cached contract state without the reference
 /// to the original contract state
+#[derive(Clone)]
 pub struct PersistentCachedContractState {
     pub(super) modified: HashMap<StateIndex, ContractValue>
 }

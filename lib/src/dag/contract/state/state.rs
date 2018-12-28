@@ -13,11 +13,11 @@ use super::cache::CachedContractState;
 /// Represents the state of a contract
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ContractState {
-    pub(super) int32: Vec<u32>,
-    pub(super) int64: Vec<u64>,
-    pub(super) float32: Vec<f32>,
-    pub(super) float64: Vec<f64>,
-    pub(super) mappings: Vec<HashMap<u64, u64>>,
+    pub(crate) int32: Vec<u32>,
+    pub(crate) int64: Vec<u64>,
+    pub(crate) float32: Vec<f32>,
+    pub(crate) float64: Vec<f64>,
+    pub(crate) mappings: Vec<HashMap<u64, u64>>,
 }
 
 impl ContractState {
