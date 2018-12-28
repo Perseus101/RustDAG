@@ -4,6 +4,6 @@ use dag::contract::source::ContractSource;
 pub enum TransactionData {
     Genesis,
     GenContract(ContractSource),
-    // TODO
     ExecContract,
+    Empty,
 }

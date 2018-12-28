@@ -1,6 +1,27 @@
+use wasmi::RuntimeValue;
+
 use super::source::ContractSource;
 use super::state::ContractState;
 use super::error::ContractError;
+
+/// Represents the values that can be passed to a contract
+pub enum ContractValue {
+    U32(u32),
+    U64(u64),
+    F32(f32),
+    F64(f64),
+}
+
+impl From<ContractValue> for RuntimeValue {
+    fn from(val: ContractValue) -> Self {
+        match val {
+            ContractValue::U32(val) => RuntimeValue::I32(val as i32),
+            ContractValue::U64(val) => RuntimeValue::I64(val as i64),
+            ContractValue::F32(val) => RuntimeValue::F32(val.into()),
+            ContractValue::F64(val) => RuntimeValue::F64(val.into()),
+        }
+    }
+}
 
 /// Encapsulates logic and state of a smart contract
 ///
@@ -17,28 +38,18 @@ pub struct Contract {
     state: ContractState,
 }
 
-impl From<ContractSource> for Contract {
-    fn from(src: ContractSource) -> Self {
-        // TODO
-        Contract {
-            state: ContractState::new(vec![]),
-            src: src
-        }
-    }
-}
-
 impl Contract {
-    pub fn new(src: ContractSource, state: ContractState) -> Self {
-        Contract {
-            src,
-            state
-        }
+    pub fn new(src: ContractSource) -> Result<Self, ContractError> {
+        let state = ContractState::create(&src)?;
+        Ok(Contract {
+            state: state,
+            src: src
+        })
     }
 
     /// Executes the contract function
-    pub fn exec(&self, fn_ident: String, args: Vec<u8>) -> Result<(), ContractError> {
-        let module = self.src.get_wasm_module()?;
-
+    pub fn exec(&self, func_name: &str, args: &[ContractValue]) -> Result<(), ContractError> {
+        // TODO
         Ok(())
     }
 

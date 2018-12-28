@@ -1,36 +1,228 @@
+use std::collections::HashMap;
+
 use wasmi::{
-    Error as InterpreterError, Trap, TrapKind, ModuleImportResolver, Externals,
-    FuncRef, FuncInstance, Signature, ValueType, RuntimeValue, RuntimeArgs,
-    nan_preserving_float::{F32, F64}
+    Error as InterpreterError, Trap, TrapKind, ModuleRef, Externals,
+    RuntimeValue, RuntimeArgs, nan_preserving_float::{F32, F64}
 };
 
-use super::state::{ContractState, StateValue};
+use dag::contract::resolver::*;
+use dag::contract::{ContractValue, error::ContractError};
 
-struct CachedContractState {
-    state: Vec<StateValue>
+use super::ContractState;
+use super::persistent::PersistentCachedContractState;
+
+#[derive(Hash, PartialEq, Eq)]
+pub enum StateIndex {
+    U32(u32),
+    U64(u32),
+    F32(u32),
+    F64(u32),
+    Mapping(u32, u64),
 }
 
-impl From<ContractState> for CachedContractState {
-    fn from(contract: ContractState) -> Self {
+/// Cached state of a contract
+///
+/// Uses copy on write to only store updated state, and holds a reference to the
+/// original contract state to access unmodified state.
+pub struct CachedContractState<'a> {
+    modified: HashMap<StateIndex, ContractValue>,
+    module: &'a ModuleRef,
+    state: &'a ContractState
+}
+
+impl<'a> CachedContractState<'a> {
+
+    /// Create a new cached state from a contract state
+    pub fn new(module: &'a ModuleRef, state: &'a ContractState) -> Self {
         CachedContractState {
-            state: contract.into_state()
+            modified: HashMap::new(),
+            module,
+            state
         }
+    }
+
+    /// Move the modified values in a different data structure to drop the
+    /// reference to the contract state
+    pub fn persist(self) -> PersistentCachedContractState {
+        PersistentCachedContractState::new(self.modified)
+    }
+
+    /// Take ownership of the modified values and a new reference to the
+    /// contract state to resume execution
+    pub fn resume(cache: PersistentCachedContractState, module: &'a ModuleRef, state: &'a ContractState)
+            -> Self {
+        CachedContractState {
+            modified: cache.modified,
+            module,
+            state
+        }
+    }
+
+    /// Call the state size functions that are expected to exist in the contract
+    /// and return their results
+    ///
+    /// #Returns
+    /// (int32_cap, int64_cap, float32_cap, float64_cap, mapping_cap)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// * the required functions do not exist
+    pub fn get_state_sizes(&mut self) -> Result<(u32, u32, u32, u32, u32), ContractError> {
+        let int32_cap: u32 = self.exec("__ofc__state_u32", &[])?
+            .ok_or_else(|| { ContractError::RequiredFnNotFound })
+            .map(|rt_val| { match rt_val { RuntimeValue::I32(val) => Some(val as u32), _ => None } })?
+            .ok_or_else(|| { ContractError::TypeMismatch })?;
+
+        let int64_cap: u32 = self.exec("__ofc__state_u64", &[])?
+            .ok_or_else(|| { ContractError::RequiredFnNotFound })
+            .map(|rt_val| { match rt_val { RuntimeValue::I32(val) => Some(val as u32), _ => None } })?
+            .ok_or_else(|| { ContractError::TypeMismatch })?;
+
+        let float32_cap: u32 = self.exec("__ofc__state_f32", &[])?
+            .ok_or_else(|| { ContractError::RequiredFnNotFound })
+            .map(|rt_val| { match rt_val { RuntimeValue::I32(val) => Some(val as u32), _ => None } })?
+            .ok_or_else(|| { ContractError::TypeMismatch })?;
+
+        let float64_cap: u32 = self.exec("__ofc__state_f64", &[])?
+            .ok_or_else(|| { ContractError::RequiredFnNotFound })
+            .map(|rt_val| { match rt_val { RuntimeValue::I32(val) => Some(val as u32), _ => None } })?
+            .ok_or_else(|| { ContractError::TypeMismatch })?;
+
+        let mapping_cap: u32 = self.exec("__ofc__state_mapping", &[])?
+            .ok_or_else(|| { ContractError::RequiredFnNotFound })
+            .map(|rt_val| { match rt_val { RuntimeValue::I32(val) => Some(val as u32), _ => None } })?
+            .ok_or_else(|| { ContractError::TypeMismatch })?;
+
+        Ok((int32_cap, int64_cap, float32_cap, float64_cap, mapping_cap))
+    }
+
+    /// Execute a contract function
+    ///
+    /// Executes the contract function with the name func_name with args as arguments
+    ///
+    /// #Errors
+    /// Returns an error if:
+    /// * the function does not exist
+    /// * given arguments doesn't match to function signature,
+    /// * trap occurred at the execution time,
+    pub fn exec(&mut self, func_name: &str, args: &[RuntimeValue])
+            -> Result<Option<RuntimeValue>, InterpreterError> {
+        self.module.invoke_export(func_name, args, self)
+    }
+
+    fn get_u32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
+        match self.modified.get(&StateIndex::U32(index)) {
+            Some(ContractValue::U32(val)) => Ok(Some(RuntimeValue::I32(*val as i32))),
+            Some(_) => Err(Trap::new(TrapKind::Unreachable)),
+            None => { // Value is not in cache
+                match self.state.int32.get(index as usize) {
+                    Some(val) => Ok(Some(RuntimeValue::I32(*val as i32))),
+                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
+                }
+            },
+        }
+    }
+
+    fn get_u64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
+        match self.modified.get(&StateIndex::U64(index)) {
+            Some(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(*val as i64))),
+            Some(_) => Err(Trap::new(TrapKind::Unreachable)),
+            None => { // Value is not in cache
+                match self.state.int64.get(index as usize) {
+                    Some(val) => Ok(Some(RuntimeValue::I64(*val as i64))),
+                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
+                }
+            },
+        }
+    }
+
+    fn get_f32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
+        match self.modified.get(&StateIndex::F32(index)) {
+            Some(ContractValue::F32(val)) => Ok(Some(RuntimeValue::F32(F32::from(*val)))),
+            Some(_) => Err(Trap::new(TrapKind::Unreachable)),
+            None => { // Value is not in cache
+                match self.state.float32.get(index as usize) {
+                    Some(val) => Ok(Some(RuntimeValue::F32(F32::from(*val)))),
+                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
+                }
+            },
+        }
+    }
+
+    fn get_f64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
+        match self.modified.get(&StateIndex::F64(index)) {
+            Some(ContractValue::F64(val)) => Ok(Some(RuntimeValue::F64(F64::from(*val)))),
+            Some(_) => Err(Trap::new(TrapKind::Unreachable)),
+            None => { // Value is not in cache
+                match self.state.float64.get(index as usize) {
+                    Some(val) => Ok(Some(RuntimeValue::F64(F64::from(*val)))),
+                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
+                }
+            },
+        }
+    }
+
+    fn get_mapping(&self, index: u32, key: u64) -> Result<Option<RuntimeValue>, Trap> {
+        match self.modified.get(&StateIndex::Mapping(index, key)) {
+            Some(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(*val as i64))),
+            Some(_) => Err(Trap::new(TrapKind::Unreachable)),
+            None => { // Value is not in cache
+                match self.state.mappings.get(index as usize) {
+                    Some(mapping) => {
+                        match mapping.get(&key) {
+                            Some(val) => Ok(Some(RuntimeValue::I64(*val as i64))),
+                            None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
+                        }
+                    },
+                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
+                }
+            },
+        }
+    }
+
+    fn set_u32(&mut self, index: u32, value: u32) -> Result<(), Trap> {
+        if index as usize >= self.state.int32.len() {
+            return Err(Trap::new(TrapKind::MemoryAccessOutOfBounds));
+        }
+        self.modified.insert(StateIndex::U32(index), ContractValue::U32(value));
+        Ok(())
+    }
+
+    fn set_u64(&mut self, index: u32, value: u64) -> Result<(), Trap> {
+        if index as usize >= self.state.int64.len() {
+            return Err(Trap::new(TrapKind::MemoryAccessOutOfBounds));
+        }
+        self.modified.insert(StateIndex::U64(index), ContractValue::U64(value));
+        Ok(())
+    }
+
+    fn set_f32(&mut self, index: u32, value: f32) -> Result<(), Trap> {
+        if index as usize >= self.state.float32.len() {
+            return Err(Trap::new(TrapKind::MemoryAccessOutOfBounds));
+        }
+        self.modified.insert(StateIndex::F32(index), ContractValue::F32(value));
+        Ok(())
+    }
+
+    fn set_f64(&mut self, index: u32, value: f64) -> Result<(), Trap> {
+        if index as usize >= self.state.float64.len() {
+            return Err(Trap::new(TrapKind::MemoryAccessOutOfBounds));
+        }
+        self.modified.insert(StateIndex::F64(index), ContractValue::F64(value));
+        Ok(())
+    }
+
+    fn set_mapping(&mut self, index: u32, key: u64, value: u64) -> Result<(), Trap> {
+        if index as usize >= self.state.mappings.len() {
+            return Err(Trap::new(TrapKind::MemoryAccessOutOfBounds));
+        }
+        self.modified.insert(StateIndex::Mapping(index, key), ContractValue::U64(value));
+        Ok(())
     }
 }
 
-const GET_INT32_INDEX: usize = 0;
-const GET_INT64_INDEX: usize = 1;
-const GET_FLOAT32_INDEX: usize = 2;
-const GET_FLOAT64_INDEX: usize = 3;
-const GET_MAPPING_INDEX: usize = 4;
-
-const SET_INT32_INDEX: usize = 5;
-const SET_INT64_INDEX: usize = 6;
-const SET_FLOAT32_INDEX: usize = 7;
-const SET_FLOAT64_INDEX: usize = 8;
-const SET_MAPPING_INDEX: usize = 9;
-
-impl Externals for CachedContractState {
+impl<'a> Externals for CachedContractState<'a> {
     fn invoke_index(
         &mut self,
         index: usize,
@@ -39,186 +231,61 @@ impl Externals for CachedContractState {
         match index {
             GET_INT32_INDEX => {
                 let index: u32 = args.nth(0);
-                match self.state.get(index as usize) {
-                    Some(StateValue::U32(val)) => Ok(Some(RuntimeValue::I32(*val as i32))),
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.get_u32(index)
             },
             GET_INT64_INDEX => {
                 let index: u32 = args.nth(0);
-                match self.state.get(index as usize) {
-                    Some(StateValue::U64(val)) => Ok(Some(RuntimeValue::I64(*val as i64))),
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.get_u64(index)
             },
             GET_FLOAT32_INDEX => {
                 let index: u32 = args.nth(0);
-                match self.state.get(index as usize) {
-                    Some(StateValue::F32(val)) => Ok(Some(RuntimeValue::F32(F32::from(*val)))),
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.get_f32(index)
             },
             GET_FLOAT64_INDEX => {
                 let index: u32 = args.nth(0);
-                match self.state.get(index as usize) {
-                    Some(StateValue::F64(val)) => Ok(Some(RuntimeValue::F64(F64::from(*val)))),
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.get_f64(index)
             },
             GET_MAPPING_INDEX => {
                 let index: u32 = args.nth(0);
                 let key: u64 = args.nth(1);
-                match self.state.get(index as usize) {
-                    Some(StateValue::Mapping(val)) => {
-                        val.get(&key).ok_or_else(|| {
-                            Trap::new(TrapKind::MemoryAccessOutOfBounds)
-                        }).map(|val: &u64| { Some(RuntimeValue::I64(*val as i64)) })
-                    },
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.get_mapping(index, key)
             },
 
 
             SET_INT32_INDEX => {
                 let index: u32 = args.nth(0);
                 let value: u32 = args.nth(1);
-                match self.state.get_mut(index as usize) {
-                    Some(StateValue::U32(ref mut val)) => {
-                        *val = value;
-                        Ok(None)
-                    },
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.set_u32(index, value)?;
+                Ok(None)
             },
             SET_INT64_INDEX => {
                 let index: u32 = args.nth(0);
                 let value: u64 = args.nth(1);
-                match self.state.get_mut(index as usize) {
-                    Some(StateValue::U64(ref mut val)) => {
-                        *val = value;
-                        Ok(None)
-                    },
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.set_u64(index, value)?;
+                Ok(None)
             },
             SET_FLOAT32_INDEX => {
                 let index: u32 = args.nth(0);
                 let value: F32 = args.nth(1);
-                match self.state.get_mut(index as usize) {
-                    Some(StateValue::F32(ref mut val)) => {
-                        *val = value.to_float();
-                        Ok(None)
-                    },
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.set_f32(index, value.to_float())?;
+                Ok(None)
             },
             SET_FLOAT64_INDEX => {
                 let index: u32 = args.nth(0);
                 let value: F64 = args.nth(1);
-                match self.state.get_mut(index as usize) {
-                    Some(StateValue::F64(ref mut val)) => {
-                        *val = value.to_float();
-                        Ok(None)
-                    },
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.set_f64(index, value.to_float())?;
+                Ok(None)
             },
             SET_MAPPING_INDEX => {
                 let index: u32 = args.nth(0);
                 let key: u64 = args.nth(1);
                 let value: u64 = args.nth(2);
-                match self.state.get_mut(index as usize) {
-                    Some(StateValue::Mapping(ref mut val)) => {
-                        val.insert(key, value);
-                        Ok(None)
-                    },
-                    Some(_) => Err(Trap::new(TrapKind::Unreachable)),
-                    None => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds)),
-                }
+                self.set_mapping(index, key, value)?;
+                Ok(None)
             },
 
             _ => Err(Trap::new(TrapKind::Unreachable)),
         }
-    }
-}
-
-pub struct Resolver;
-
-impl ModuleImportResolver for Resolver {
-    fn resolve_func(
-        &self,
-        field_name: &str,
-        _signature: &Signature,
-    ) -> Result<FuncRef, InterpreterError> {
-        let func_ref = match field_name {
-            "__ofc__get_u32" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32][..], Some(ValueType::I32)),
-                GET_INT32_INDEX,
-            ),
-            "__ofc__get_u64" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32][..], Some(ValueType::I64)),
-                GET_INT64_INDEX,
-            ),
-            "__ofc__get_f32" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32][..], Some(ValueType::F32)),
-                GET_FLOAT32_INDEX,
-            ),
-            "__ofc__get_f64" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32][..], Some(ValueType::F64)),
-                GET_FLOAT64_INDEX,
-            ),
-            "__ofc__get_mapping" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32, ValueType::I64][..],
-                Some(ValueType::I64)), GET_MAPPING_INDEX,
-            ),
-
-            "__ofc__set_u32" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::I32][..], None
-                ),
-                SET_INT32_INDEX,
-            ),
-            "__ofc__set_u64" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::I64][..], None
-                ),
-                SET_INT64_INDEX,
-            ),
-            "__ofc__set_f32" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::F32][..], None
-                ),
-                SET_FLOAT32_INDEX,
-            ),
-            "__ofc__set_f64" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::F64][..], None
-                ),
-                SET_FLOAT64_INDEX,
-            ),
-            "__ofc__set_mapping" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::I64, ValueType::I64][..], None
-                ),
-                SET_MAPPING_INDEX,
-            ),
-            _ => {
-                return Err(InterpreterError::Function(format!(
-                    "host module doesn't export function with name {}",
-                    field_name
-                )));
-            }
-        };
-        Ok(func_ref)
     }
 }
 
@@ -228,7 +295,6 @@ mod tests {
     use std::path::PathBuf;
     use std::fs::File;
     use std::io::Read;
-    use std::collections::HashMap;
 
     use wasmi::{Module, ModuleInstance, ModuleRef, ImportsBuilder};
 
@@ -255,149 +321,101 @@ mod tests {
 
     #[test]
     fn test_api_resolver_u32() {
-        let state = ContractState::new(vec![StateValue::U32(1)]);
-        let mut temp_state = CachedContractState::from(state);
-        let main = load_api_test_module_instance();
+        let state = ContractState::new(1, 0, 0, 0, 0);
+        let module = load_api_test_module_instance();
+        let mut temp_state = CachedContractState::new(&module, &state);
 
-        assert_eq!(Some(RuntimeValue::I32(1)), main.invoke_export(
-            "get_u32",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::I32(0)), temp_state.exec("get_u32",
+            &[RuntimeValue::I32(0)]).unwrap());
 
-        assert!(main.invoke_export(
-            "set_u32",
-            &[RuntimeValue::I32(0), RuntimeValue::I32(10)],
-            &mut temp_state).is_ok());
+        assert!(temp_state.exec("set_u32",
+            &[RuntimeValue::I32(0), RuntimeValue::I32(10)]).is_ok());
 
-        assert_eq!(Some(RuntimeValue::I32(10)), main.invoke_export(
-            "get_u32",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::I32(10)), temp_state.exec("get_u32",
+            &[RuntimeValue::I32(0)]).unwrap());
 
-        // Error, because we are trying to retrieve a u64 where there is a u32
-        assert!(main.invoke_export(
-            "get_u64",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).is_err());
-
-        // Error, incorrect arguments
-        assert!(main.invoke_export(
-            "get_u32",
-            &[RuntimeValue::I64(0)],
-            &mut temp_state).is_err());
+        // Error, out of bounds
+        assert!(temp_state.exec("get_u32", &[RuntimeValue::I32(1)]).is_err());
     }
 
     #[test]
     fn test_api_resolver_u64() {
-        let state = ContractState::new(vec![StateValue::U64(1)]);
-        let mut temp_state = CachedContractState::from(state);
-        let main = load_api_test_module_instance();
+        let state = ContractState::new(0, 1, 0, 0, 0);
+        let module = load_api_test_module_instance();
+        let mut temp_state = CachedContractState::new(&module, &state);
 
-        assert_eq!(Some(RuntimeValue::I64(1)), main.invoke_export(
-            "get_u64",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::I64(0)), temp_state.exec("get_u64",
+            &[RuntimeValue::I32(0)]).unwrap());
 
-        assert!(main.invoke_export(
-            "set_u64",
-            &[RuntimeValue::I32(0), RuntimeValue::I64(10)],
-            &mut temp_state).is_ok());
+        assert!(temp_state.exec("set_u64",
+            &[RuntimeValue::I32(0), RuntimeValue::I64(10)]).is_ok());
 
-        assert_eq!(Some(RuntimeValue::I64(10)), main.invoke_export(
-            "get_u64",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::I64(10)), temp_state.exec("get_u64",
+            &[RuntimeValue::I32(0)]).unwrap());
 
-        // Error, because we are trying to retrieve a u32 where there is a u64
-        assert!(main.invoke_export(
-            "get_u32",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).is_err());
+        // Error, out of bounds
+        assert!(temp_state.exec("get_u64", &[RuntimeValue::I32(1)]).is_err());
     }
 
     #[test]
     fn test_api_resolver_f32() {
-        let state = ContractState::new(vec![StateValue::F32(1f32)]);
-        let mut temp_state = CachedContractState::from(state);
-        let main = load_api_test_module_instance();
+        let state = ContractState::new(0, 0, 1, 0, 0);
+        let module = load_api_test_module_instance();
+        let mut temp_state = CachedContractState::new(&module, &state);
 
-        assert_eq!(Some(RuntimeValue::F32(1f32.into())), main.invoke_export(
-            "get_f32",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::F32(0f32.into())), temp_state.exec(
+            "get_f32", &[RuntimeValue::I32(0)]).unwrap());
 
-        assert!(main.invoke_export(
-            "set_f32",
-            &[RuntimeValue::I32(0), RuntimeValue::F32(10f32.into())],
-            &mut temp_state).is_ok());
+        assert!(temp_state.exec("set_f32",
+            &[RuntimeValue::I32(0), RuntimeValue::F32(10f32.into())]).is_ok());
 
-        assert_eq!(Some(RuntimeValue::F32(10f32.into())), main.invoke_export(
-            "get_f32",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::F32(10f32.into())), temp_state.exec(
+            "get_f32", &[RuntimeValue::I32(0)]).unwrap());
 
-        // Error, because we are trying to retrieve a f64 where there is a f32
-        assert!(main.invoke_export(
-            "get_f64",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).is_err());
+        // Error, out of bounds
+        assert!(temp_state.exec("get_f32", &[RuntimeValue::I32(1)]).is_err());
     }
 
     #[test]
     fn test_api_resolver_f64() {
-        let state = ContractState::new(vec![StateValue::F64(1f64)]);
-        let mut temp_state = CachedContractState::from(state);
-        let main = load_api_test_module_instance();
+        let state = ContractState::new(0, 0, 0, 1, 0);
+        let module = load_api_test_module_instance();
+        let mut temp_state = CachedContractState::new(&module, &state);
 
-        assert_eq!(Some(RuntimeValue::F64(1f64.into())), main.invoke_export(
-            "get_f64",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::F64(0f64.into())), temp_state.exec(
+            "get_f64", &[RuntimeValue::I32(0)]).unwrap());
 
-        assert!(main.invoke_export(
-            "set_f64",
-            &[RuntimeValue::I32(0), RuntimeValue::F64(10f64.into())],
-            &mut temp_state).is_ok());
+        assert!(temp_state.exec("set_f64",
+            &[RuntimeValue::I32(0), RuntimeValue::F64(10f64.into())]).is_ok());
 
-        assert_eq!(Some(RuntimeValue::F64(10f64.into())), main.invoke_export(
-            "get_f64",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::F64(10f64.into())), temp_state.exec(
+            "get_f64", &[RuntimeValue::I32(0)]).unwrap());
 
-        // Error, because we are trying to retrieve a f64 where there is a f32
-        assert!(main.invoke_export(
-            "get_f32",
-            &[RuntimeValue::I32(0)],
-            &mut temp_state).is_err());
+        // Error, out of bounds
+        assert!(temp_state.exec("get_f64", &[RuntimeValue::I32(1)]).is_err());
     }
 
     #[test]
     fn test_api_resolver_mapping() {
-        let state = ContractState::new(vec![StateValue::Mapping(HashMap::new())]);
-        let mut temp_state = CachedContractState::from(state);
-        let main = load_api_test_module_instance();
+        let state = ContractState::new(0, 0, 0, 0, 1);
+        let module = load_api_test_module_instance();
+        let mut temp_state = CachedContractState::new(&module, &state);
 
-        assert!(main.invoke_export(
-            "get_mapping",
-            &[RuntimeValue::I32(0), RuntimeValue::I64(0)],
-            &mut temp_state).is_err());
+        assert!(temp_state.exec("get_mapping",
+            &[RuntimeValue::I32(0), RuntimeValue::I64(0)]).is_err());
 
-        assert!(main.invoke_export(
-            "set_mapping",
-            &[RuntimeValue::I32(0), RuntimeValue::I64(0), RuntimeValue::I64(0)],
-            &mut temp_state).is_ok());
-        assert!(main.invoke_export(
-            "set_mapping",
-            &[RuntimeValue::I32(0), RuntimeValue::I64(1), RuntimeValue::I64(10)],
-            &mut temp_state).is_ok());
+        assert!(temp_state.exec("set_mapping",
+            &[RuntimeValue::I32(0), RuntimeValue::I64(0), RuntimeValue::I64(0)]).is_ok());
+        assert!(temp_state.exec("set_mapping",
+            &[RuntimeValue::I32(0), RuntimeValue::I64(1), RuntimeValue::I64(10)]).is_ok());
 
-        assert_eq!(Some(RuntimeValue::I64(0)), main.invoke_export(
-            "get_mapping",
-            &[RuntimeValue::I32(0), RuntimeValue::I64(0)],
-            &mut temp_state).unwrap());
-        assert_eq!(Some(RuntimeValue::I64(10)), main.invoke_export(
-            "get_mapping",
-            &[RuntimeValue::I32(0), RuntimeValue::I64(1)],
-            &mut temp_state).unwrap());
+        assert_eq!(Some(RuntimeValue::I64(0)), temp_state.exec("get_mapping",
+            &[RuntimeValue::I32(0), RuntimeValue::I64(0)]).unwrap());
+        assert_eq!(Some(RuntimeValue::I64(10)), temp_state.exec("get_mapping",
+            &[RuntimeValue::I32(0), RuntimeValue::I64(1)]).unwrap());
+
+        // Error, out of bounds
+        assert!(temp_state.exec("get_mapping",
+            &[RuntimeValue::I32(1), RuntimeValue::I64(0)]).is_err());
     }
 }

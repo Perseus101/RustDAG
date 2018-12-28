@@ -3,4 +3,6 @@ pub mod state;
 pub mod error;
 
 mod contract;
-pub use self::contract::Contract;
+mod resolver;
+
+pub use self::contract::{Contract, ContractValue};

@@ -88,18 +88,20 @@ impl BlockDAG {
         let hash = transaction.get_hash();
 
         match transaction.get_data() {
-            TransactionData::Genesis => {
-                return TransactionStatus::Rejected;
-            },
+            TransactionData::Genesis => return TransactionStatus::Rejected,
             TransactionData::GenContract(src) => {
                 // Generate a new contract
-                self.contracts.insert(hash, src.clone().into());
+                match Contract::new(src.clone()) {
+                    Ok(contract) => { self.contracts.insert(hash, contract); },
+                    Err(_) => return TransactionStatus::Rejected,
+                }
             },
             TransactionData::ExecContract => {
                 // Execute the function on the contract
                 // TODO
                 return TransactionStatus::Rejected;
-            }
+            },
+            TransactionData::Empty => {}
         }
 
         for hash in transaction.get_ref_hashes() {
@@ -326,7 +328,7 @@ mod tests {
     fn test_add_transaction() {
         let mut dag = BlockDAG::default();
         let mut key = PrivateKey::new(&SHA512_256);
-        let data = TransactionData::GenContract(ContractSource::new(&vec![]));
+        let data = TransactionData::Empty;
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
             vec![], 0, BASE_NONCE, data);
         transaction.sign(&mut key);
@@ -390,7 +392,7 @@ mod tests {
         assert_eq!(dag.get_confirmation_status(10), TransactionStatus::Rejected);
 
         let mut key = PrivateKey::new(&SHA512_256);
-        let data = TransactionData::GenContract(ContractSource::new(&vec![]));
+        let data = TransactionData::Empty;
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
             vec![], 0, BASE_NONCE, data);
         transaction.sign(&mut key);
