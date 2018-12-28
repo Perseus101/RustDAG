@@ -1,5 +1,5 @@
 use wasmi::{
-    Error as InterpreterError, ModuleImportResolver,
+    Error as InterpreterError, ModuleImportResolver, ImportsBuilder,
     FuncRef, FuncInstance, Signature, ValueType
 };
 
@@ -16,6 +16,12 @@ pub const SET_FLOAT64_INDEX: usize = 8;
 pub const SET_MAPPING_INDEX: usize = 9;
 
 pub struct Resolver;
+
+pub fn get_imports_builder<'a>() -> ImportsBuilder<'a> {
+    let mut imports = ImportsBuilder::new();
+    imports.push_resolver("env", &Resolver);
+    imports
+}
 
 impl ModuleImportResolver for Resolver {
     fn resolve_func(

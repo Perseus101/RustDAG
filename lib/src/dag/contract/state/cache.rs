@@ -62,6 +62,7 @@ impl<'a> CachedContractState<'a> {
     /// and return their results
     ///
     /// #Returns
+    ///
     /// (int32_cap, int64_cap, float32_cap, float64_cap, mapping_cap)
     ///
     /// # Errors
@@ -102,6 +103,7 @@ impl<'a> CachedContractState<'a> {
     /// Executes the contract function with the name func_name with args as arguments
     ///
     /// #Errors
+    ///
     /// Returns an error if:
     /// * the function does not exist
     /// * given arguments doesn't match to function signature,
