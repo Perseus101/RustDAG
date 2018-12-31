@@ -49,8 +49,7 @@ impl PendingMilestone {
     pub fn next(&mut self, event: StateUpdate) -> Result<(), MilestoneError> {
         let mut res = Ok(());
         {
-            let _res = &mut res;
-            replace_with_or_abort(self, move |_self| {
+            replace_with_or_abort(self, |_self| {
                 let out = match _self {
                     PendingMilestone::Pending(pending) => {
                         pending.next(&event)
@@ -69,7 +68,7 @@ impl PendingMilestone {
                     Ok(state) => state,
                     Err(err) => {
                         let (state, _err) = err.convert();
-                        *_res = Err(_err);
+                        res = Err(_err);
                         state
                     }
                 }
