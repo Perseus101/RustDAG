@@ -18,7 +18,7 @@ impl TransactionHashes {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub enum TransactionStatus {
     Accepted,
-    Rejected,
+    Rejected(String),
     Pending,
     Milestone
 }

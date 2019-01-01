@@ -5,6 +5,7 @@ use std::sync::Arc;
 use dag::{
     blockdag::BlockDAG,
     transaction::Transaction,
+    contract::Contract,
     milestone::pending::MilestoneSignature
 };
 use peermanager::PeerManager;
@@ -31,7 +32,11 @@ impl DAGManager {
     }
 
     pub fn get_transaction(&self, hash: u64) -> Option<Transaction> {
-        self.dag.read().unwrap().get_transaction(hash)
+        self.dag.read().unwrap().get_transaction(hash).and_then(|t| Some(t.clone()))
+    }
+
+    pub fn get_contract(&self, hash: u64) -> Option<Contract> {
+        self.dag.read().unwrap().get_contract(hash).and_then(|c| Some(c.clone()))
     }
 
     pub fn get_transaction_status(&self, hash: u64) -> TransactionStatus {
@@ -44,7 +49,8 @@ impl DAGManager {
             // Ignore any already known transactions
             let current_status = self.dag.read().unwrap()
                 .get_confirmation_status(hash);
-            if current_status != TransactionStatus::Rejected {
+            if current_status == TransactionStatus::Pending ||
+                    current_status == TransactionStatus::Milestone {
                 return current_status;
             }
         }
@@ -54,7 +60,8 @@ impl DAGManager {
             // Scope the dag write so that it is opened and closed quickly
             status = self.dag.write().unwrap().add_transaction(&transaction);
         }
-        if status != TransactionStatus::Rejected {
+        if status == TransactionStatus::Pending ||
+                status == TransactionStatus::Milestone {
             self.peers.read().unwrap().map_peers(|peer| {
                 peer.post_transaction(&transaction)
             });
@@ -89,16 +96,12 @@ impl DAGManager {
                             for contract in dag.get_contracts() {
                                 dag.add_pending_signature(MilestoneSignature::new(hash, contract, 0));
                             }
-                            println!("Confirmation status: {:?} - {:?}\n\n\n\n\n", hash, dag.get_confirmation_status(hash))
                         }
                     }
                 });
             }
-            status
         }
-        else {
-            TransactionStatus::Rejected
-        }
+        status
     }
 
     // Peer functions

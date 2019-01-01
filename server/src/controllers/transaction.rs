@@ -1,4 +1,4 @@
-use rocket::State;
+use rocket::{Route, State};
 use rocket_contrib::json::Json;
 
 use rustdag_lib::util::{HexEncodedTransaction, types::TransactionStatus};
@@ -6,7 +6,7 @@ use rustdag_lib::dag::transaction::Transaction;
 
 use dagmanager::DAGManager;
 
-pub fn transaction_routes() -> std::vec::Vec<rocket::Route> {
+pub fn transaction_routes() -> Vec<Route> {
     routes![get_transaction, get_transaction_status, get_transaction_hex,
             post_transaction, post_hex_transaction]
 }
