@@ -141,9 +141,10 @@ impl Transaction {
             let mut s = Sha3Hasher::new();
             self.hash(&mut s);
             let bytes = &s.finish_bytes();
-            let mut signature = vec![vec![0; 32]; 256];
-            for i in 0..256 {
-                signature[i].copy_from_slice(&self.signature[i*32..(i+1)*32]);
+            const SIGNATURE_FRAGMENTS: usize = 256;
+            let mut signature = vec![vec![0; 32]; SIGNATURE_FRAGMENTS];
+            for (i, sig_frag) in signature.iter_mut().enumerate().take(SIGNATURE_FRAGMENTS) {
+                sig_frag.copy_from_slice(&self.signature[i*32..(i+1)*32]);
             }
             return key.verify_signature(&signature, bytes);
         }
