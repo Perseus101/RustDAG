@@ -56,6 +56,7 @@ impl Transaction {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn raw(branch_transaction: u64, trunk_transaction: u64,
             ref_transactions: Vec<u64>, contract: u64, timestamp: u64,
             nonce: u32, address: Vec<u8>, signature: Vec<u8>,

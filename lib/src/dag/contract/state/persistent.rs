@@ -17,7 +17,7 @@ pub struct PersistentCachedContractState {
 impl PersistentCachedContractState {
     pub fn new(modified: HashMap<StateIndex, ContractValue>) -> Self {
         PersistentCachedContractState {
-            modified: modified
+            modified
         }
     }
 

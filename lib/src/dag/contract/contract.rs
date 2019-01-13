@@ -1,3 +1,7 @@
+#![allow(clippy::derive_hash_xor_eq)]
+
+use std::hash::{Hash,Hasher};
+
 use wasmi::{RuntimeValue, ModuleInstance};
 
 use super::source::ContractSource;
@@ -16,6 +20,18 @@ pub enum ContractValue {
     U64(u64),
     F32(f32),
     F64(f64),
+}
+
+impl Hash for ContractValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            ContractValue::U32(val) => val.hash(state),
+            ContractValue::U64(val) => val.hash(state),
+            // Since floats cannot directly be hashed, just hash a placeholder
+            ContractValue::F32(_) => 0.hash(state),
+            ContractValue::F64(_) => 1.hash(state),
+        }
+    }
 }
 
 impl From<ContractValue> for RuntimeValue {
@@ -59,8 +75,8 @@ impl Contract {
     pub fn new(src: ContractSource) -> Result<Self, ContractError> {
         let state = ContractState::create(&src)?;
         Ok(Contract {
-            state: state,
-            src: src
+            state,
+            src
         })
     }
 
@@ -96,7 +112,7 @@ impl Contract {
 
     fn exec_from_cached_state(&self, func_name: &str, args: &[ContractValue], mut state: CachedContractState)
             -> Result<(Option<ContractValue>, PersistentCachedContractState), ContractError> {
-        let return_value = state.exec(func_name, &args.into_iter()
+        let return_value = state.exec(func_name, &args.iter()
             .map(|x| RuntimeValue::from(x.clone())).collect::<Vec<_>>())?
             .map(|value| { ContractValue::from(value) });
         Ok((return_value, state.persist()))
