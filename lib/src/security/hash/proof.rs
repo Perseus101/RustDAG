@@ -25,9 +25,9 @@ pub fn valid_proof(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> bool {
 
 fn nonces_to_bytes(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> [u8;12] {
     let mut nonces: u128 =
-          ((trunk_nonce.to_le() as u128) << 64)
-        + ((branch_nonce.to_le() as u128) << 32)
-        + (nonce.to_le() as u128);
+          (u128::from(trunk_nonce.to_le()) << 64)
+        + (u128::from(branch_nonce.to_le()) << 32)
+        + u128::from(nonce.to_le());
         //to_le converts to little endian
 
     let mut bytes = [0u8; 12];

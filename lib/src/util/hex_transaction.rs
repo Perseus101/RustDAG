@@ -148,15 +148,15 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                     .ok_or_else(|| de::Error::invalid_length(8, &self))?;
 
                 Ok(HexEncodedTransaction{
-                    branch_transaction: branch_transaction,
-                    trunk_transaction: trunk_transaction,
-                    ref_transactions: ref_transactions,
-                    contract: contract,
-                    timestamp: timestamp,
-                    nonce: nonce,
-                    address: address,
-                    signature: signature,
-                    data: data
+                    branch_transaction,
+                    trunk_transaction,
+                    ref_transactions,
+                    contract,
+                    timestamp,
+                    nonce,
+                    address,
+                    signature,
+                    data
                 })
             }
 
@@ -276,20 +276,20 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                 let data = data.ok_or_else(|| de::Error::missing_field("data"))?;
 
                 Ok(HexEncodedTransaction{
-                    branch_transaction: branch_transaction,
-                    trunk_transaction: trunk_transaction,
-                    ref_transactions: ref_transactions,
-                    contract: contract,
-                    timestamp: timestamp,
-                    nonce: nonce,
-                    address: address,
-                    signature: signature,
-                    data: data
+                    branch_transaction,
+                    trunk_transaction,
+                    ref_transactions,
+                    contract,
+                    timestamp,
+                    nonce,
+                    address,
+                    signature,
+                    data
                 })
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "branch_transaction",
             "trunk_transaction",
             "ref_transactions",

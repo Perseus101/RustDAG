@@ -23,6 +23,7 @@ use super::state::{
 ///
 /// Once a milestone enters the Approved state, it is considered confirmed.
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum PendingMilestone {
     Pending(PendingState),
     Signing(SigningState),
@@ -47,33 +48,30 @@ impl PendingMilestone {
 
     pub fn next(&mut self, event: StateUpdate) -> Result<(), MilestoneError> {
         let mut res = Ok(());
-        {
-            let _res = &mut res;
-            replace_with_or_abort(self, move |_self| {
-                let out = match _self {
-                    PendingMilestone::Pending(pending) => {
-                        pending.next(&event)
-                    }
-                    PendingMilestone::Signing(signing) => {
-                        signing.next(&event)
-                    }
-                    PendingMilestone::Approved(_) => {
-                        match event {
-                            StateUpdate::Chain(_) => Err(_MilestoneErrorTag::StaleChain(_self)),
-                            StateUpdate::Sign(_) => Err(_MilestoneErrorTag::StaleSignature(_self))
-                        }
-                    }
-                };
-                match out {
-                    Ok(state) => state,
-                    Err(err) => {
-                        let (state, _err) = err.convert();
-                        *_res = Err(_err);
-                        state
+        replace_with_or_abort(self, |_self| {
+            let out = match _self {
+                PendingMilestone::Pending(pending) => {
+                    pending.next(&event)
+                }
+                PendingMilestone::Signing(signing) => {
+                    signing.next(&event)
+                }
+                PendingMilestone::Approved(_) => {
+                    match event {
+                        StateUpdate::Chain(_) => Err(_MilestoneErrorTag::StaleChain(_self)),
+                        StateUpdate::Sign(_) => Err(_MilestoneErrorTag::StaleSignature(_self))
                     }
                 }
-            });
-        }
+            };
+            match out {
+                Ok(state) => state,
+                Err(err) => {
+                    let (state, _err) = err.convert();
+                    res = Err(_err);
+                    state
+                }
+            }
+        });
         res
     }
 }
