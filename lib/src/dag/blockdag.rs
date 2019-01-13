@@ -300,10 +300,10 @@ mod tests {
 
     // Hardcoded values for the hashes of the genesis transactions.
     // If the default genesis transactions change, these values must be updated.
-    const TRUNK_HASH: u64 = 18437817136469695293;
-    const BRANCH_HASH: u64 = 6043537212972274484;
+    const TRUNK_HASH: u64 = 7994361212180723510;
+    const BRANCH_HASH: u64 = 5285319433948766311;
 
-    const BASE_NONCE: u32 = 18722;
+    const BASE_NONCE: u32 = 132;
 
     fn insert_transaction(dag: &mut BlockDAG, branch: u64, trunk: u64,
             contract: u64, data: TransactionData) -> Transaction {
