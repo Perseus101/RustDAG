@@ -14,7 +14,7 @@ use util::epoch_time;
 
 use dag::transaction::data::TransactionData;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct Transaction {
     branch_transaction: u64,
     trunk_transaction: u64,
@@ -159,6 +159,20 @@ impl Hash for Transaction {
         self.ref_transactions.hash(state);
         self.timestamp.hash(state);
         self.nonce.hash(state);
+        self.contract.hash(state);
+        self.data.hash(state);
+    }
+}
+
+impl PartialEq<Transaction> for Transaction {
+    fn eq(&self, other: &Transaction) -> bool {
+        self.branch_transaction == other.branch_transaction &&
+            self.trunk_transaction == other.trunk_transaction &&
+            self.ref_transactions == other.ref_transactions &&
+            self.timestamp == other.timestamp &&
+            self.nonce == other.nonce &&
+            self.contract == other.contract &&
+            self.data == other.data
     }
 }
 
@@ -373,7 +387,7 @@ mod tests {
         assert_eq!(vec![ref_hash, branch_hash, trunk_hash],
             transaction.get_all_refs());
         assert_eq!(0, transaction.get_nonce());
-        assert_eq!(7216540755162860552, transaction.get_hash());
+        assert_eq!(2763323875860498692, transaction.get_hash());
     }
 
     #[test]

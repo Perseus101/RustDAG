@@ -1,6 +1,10 @@
 use security::hash::sha3::{Sha3_512,Digest};
 
+#[cfg(not(test))]
 const MIN_WEIGHT_MAGNITUDE: usize = 2;
+
+#[cfg(test)]
+const MIN_WEIGHT_MAGNITUDE: usize = 1;
 
 pub fn proof_of_work(trunk_nonce: u32, branch_nonce: u32) -> u32 {
     (0u32..)
@@ -56,9 +60,8 @@ mod tests {
     }
 
     #[bench]
-    #[ignore]
     fn bench_proof_of_work(b: &mut test::Bencher) {
-        b.iter(|| assert_eq!(136516, proof_of_work(1, 0)));
+        b.iter(|| assert_eq!(20, proof_of_work(1, 0)));
     }
 
     #[bench]
