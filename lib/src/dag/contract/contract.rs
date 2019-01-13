@@ -22,7 +22,7 @@ impl From<ContractSource> for Contract {
     fn from(src: ContractSource) -> Self {
         Contract {
             state: ContractState::new(src.get_state_size()),
-            src: src
+            src
         }
     }
 }

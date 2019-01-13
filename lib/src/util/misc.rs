@@ -14,10 +14,8 @@ pub fn u32_as_hex_string(val: u32) -> String {
 pub fn epoch_time() -> u64 {
     let start = SystemTime::now();
     let epoch_duration = start.duration_since(UNIX_EPOCH).expect("Negative time delta");
-    let epoch_ms = epoch_duration.as_secs() * 1000 +
-        epoch_duration.subsec_nanos() as u64 / 1_000_000;
-
-    epoch_ms
+    epoch_duration.as_secs() * 1000 +
+        u64::from(epoch_duration.subsec_nanos()) / 1_000_000
 }
 
 #[cfg(test)]

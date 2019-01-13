@@ -33,10 +33,10 @@ impl SigningState {
             hash
         }).collect();
         SigningState {
-            transaction: transaction,
-            previous_milestone: previous_milestone,
-            transaction_chain: transaction_chain,
-            signatures: signatures
+            transaction,
+            previous_milestone,
+            transaction_chain,
+            signatures
         }
     }
 

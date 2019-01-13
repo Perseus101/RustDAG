@@ -8,8 +8,8 @@ pub struct TransactionHashes {
 impl TransactionHashes {
     pub fn new(trunk_hash: u64, branch_hash: u64) -> TransactionHashes {
         TransactionHashes {
-            trunk_hash: trunk_hash,
-            branch_hash: branch_hash,
+            trunk_hash,
+            branch_hash,
         }
     }
 }

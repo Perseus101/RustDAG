@@ -61,15 +61,15 @@ impl Transaction {
             nonce: u32, address: Vec<u8>, signature: Vec<u8>,
             data: TransactionData) -> Self {
         Transaction {
-            branch_transaction: branch_transaction,
-            trunk_transaction: trunk_transaction,
-            ref_transactions: ref_transactions,
-            contract: contract,
-            timestamp: timestamp,
-            nonce: nonce,
-            address: address,
-            signature: signature,
-            data: data,
+            branch_transaction,
+            trunk_transaction,
+            ref_transactions,
+            contract,
+            timestamp,
+            nonce,
+            address,
+            signature,
+            data,
         }
     }
 
@@ -141,9 +141,10 @@ impl Transaction {
             let mut s = Sha3Hasher::new();
             self.hash(&mut s);
             let bytes = &s.finish_bytes();
-            let mut signature = vec![vec![0; 32]; 256];
-            for i in 0..256 {
-                signature[i].copy_from_slice(&self.signature[i*32..(i+1)*32]);
+            const SIGNATURE_FRAGMENTS: usize = 256;
+            let mut signature = vec![vec![0; 32]; SIGNATURE_FRAGMENTS];
+            for (i, sig_frag) in signature.iter_mut().enumerate().take(SIGNATURE_FRAGMENTS) {
+                sig_frag.copy_from_slice(&self.signature[i*32..(i+1)*32]);
             }
             return key.verify_signature(&signature, bytes);
         }
@@ -339,7 +340,7 @@ impl<'de> Deserialize<'de> for Transaction {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "branch_transaction",
             "trunk_transaction",
             "ref_transactions",

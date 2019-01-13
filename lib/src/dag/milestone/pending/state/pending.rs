@@ -183,8 +183,8 @@ impl PendingState {
     pub fn new(transaction: Transaction, previous_milestone: Milestone) -> Self {
         PendingState {
             head: MilestoneChainData::new(&transaction),
-            transaction: transaction,
-            previous_milestone: previous_milestone
+            transaction,
+            previous_milestone
         }
     }
 }

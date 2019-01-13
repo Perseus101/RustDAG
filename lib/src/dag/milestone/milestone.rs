@@ -9,8 +9,8 @@ pub struct Milestone {
 impl Milestone {
     pub fn new(previous_milestone: u64, transaction: Transaction) -> Milestone {
         Milestone {
-            previous_milestone: previous_milestone,
-            transaction: transaction,
+            previous_milestone,
+            transaction,
         }
     }
 

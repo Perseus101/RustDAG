@@ -32,7 +32,7 @@ impl MilestoneTracker {
     /// Insert a new pending milestone
     pub fn new_milestone(&mut self, transaction: Transaction) -> bool {
         let hash = transaction.get_hash();
-        if let Some(_) = self.pending_milestones.get(&hash) {
+        if self.pending_milestones.get(&hash).is_some() {
             false
         }
         else {
@@ -61,15 +61,11 @@ impl MilestoneTracker {
             if let Err(err) = pending_milestone.next(StateUpdate::Sign(signature)) {
                 Err(err)
             }
-            else {
-                if let PendingMilestone::Approved(milestone) = pending_milestone {
-                    Ok(Some(milestone.clone()))
-                }
-                else {
-                    Ok(None)
-                }
+            else if let PendingMilestone::Approved(milestone) = pending_milestone {
+                Ok(Some(milestone.clone()))
+            } else {
+                Ok(None)
             }
-
         }
         else {
             Err(MilestoneError::StaleSignature)

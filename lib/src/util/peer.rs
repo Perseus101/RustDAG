@@ -30,7 +30,7 @@ pub struct Peer {
 impl Peer {
     pub fn new(client_url: String) -> Peer {
         Peer {
-            client_url: client_url
+            client_url
         }
     }
 

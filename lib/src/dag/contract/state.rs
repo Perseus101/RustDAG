@@ -16,6 +16,10 @@ impl ContractState {
         self.raw.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.raw.is_empty()
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         &self.raw
     }
