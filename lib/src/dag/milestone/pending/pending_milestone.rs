@@ -121,12 +121,13 @@ mod tests {
 
     #[test]
     fn test_new_pending_milestone() {
-        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
+        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
-        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, TransactionData::Genesis);
-        let second_transaction = Transaction::new(transaction.get_hash(), 0, Vec::new(), 2, 0, 1, TransactionData::Genesis);
+        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, 0, TransactionData::Genesis);
+        let second_transaction = Transaction::new(transaction.get_hash(), 0,
+            Vec::new(), 2, 0, 1, 0, TransactionData::Genesis);
 
         {
             // Test milestone that should start in pending
@@ -153,13 +154,13 @@ mod tests {
 
     #[test]
     fn test_pending_milestone_state() {
-        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
+        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
-        let trunk_transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, TransactionData::Genesis);
+        let trunk_transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, 0, TransactionData::Genesis);
         let transaction = Transaction::new(0, trunk_transaction.get_hash(),
-                Vec::new(), 1, 0, 0, TransactionData::Genesis);
+                Vec::new(), 1, 0, 0, 0, TransactionData::Genesis);
 
         let pending = PendingMilestone::new(transaction.clone(), milestone);
 
@@ -181,17 +182,17 @@ mod tests {
 
     #[test]
     fn test_signing_milestone_state() {
-        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
+        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
         // New milestone transaction
-        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, TransactionData::Genesis);
+        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, 0, TransactionData::Genesis);
         let new_milestone = Transaction::new(transaction.get_hash(), 0,
-                Vec::new(), 2, 0, 0, TransactionData::Genesis);
+                Vec::new(), 2, 0, 0, 0, TransactionData::Genesis);
 
         // Second transaction for testing chain and new events
-        let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 1, TransactionData::Genesis);
+        let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 1, 0, TransactionData::Genesis);
 
         // Create a milestone in the signing state
         let mut pending = PendingMilestone::new(new_milestone.clone(), milestone);
@@ -227,14 +228,14 @@ mod tests {
 
     #[test]
     fn test_approved_state() {
-        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, TransactionData::Genesis);
+        let milestone_transaction = Transaction::new(0, 0, Vec::new(), 0, 0, 0, 0, TransactionData::Genesis);
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
         // New milestone transaction
-        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, TransactionData::Genesis);
+        let transaction = Transaction::new(0, hash, Vec::new(), 1, 0, 0, 0, TransactionData::Genesis);
         let new_milestone = Transaction::new(transaction.get_hash(), 0,
-                Vec::new(), 2, 0, 0, TransactionData::Genesis);
+                Vec::new(), 2, 0, 0, 0, TransactionData::Genesis);
 
         // Create a milestone in the signing state
         let mut pending = PendingMilestone::new(new_milestone.clone(), milestone);
@@ -248,7 +249,7 @@ mod tests {
 
         let approved = pending;
         // Chain and signature events should raise errors
-        let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 1, TransactionData::Genesis);
+        let second_transaction = Transaction::new(0, hash, Vec::new(), 2, 0, 1, 0, TransactionData::Genesis);
         match raw_update(&approved, StateUpdate::Chain(second_transaction)) {
             Err(MilestoneError::StaleChain) => {},
             Err(err) => panic!("Unexpected error while adding chain: {:?}", err),

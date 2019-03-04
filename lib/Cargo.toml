@@ -17,6 +17,7 @@ replace_with = "0.1.2"
 base64 = "0.10.0"
 flate2 = "1.0"
 wasmi = "0.4.2"
+ordered-float = "1.0.1"
 
 [lib]
 name = "rustdag_lib"
