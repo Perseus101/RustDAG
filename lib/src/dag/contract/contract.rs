@@ -131,12 +131,12 @@ mod tests {
             ContractValue::F64(4f64),
         ];
         for (i, val) in values.iter().enumerate() {
-            root = storage.set(root, get_key(i as u32, 0), val.clone());
+            root = storage.set(root, get_key(i as u32, 0), val.clone()).unwrap();
         }
 
         let mapping_key = get_mapping_key(4, 0, 0);
         let mapping_val = ContractValue::U64(5);
-        root = storage.set(root, mapping_key, mapping_val.clone());
+        root = storage.set(root, mapping_key, mapping_val.clone()).unwrap();
 
         // Assert the values were set correctly
         for (i, val) in values.iter().enumerate() {

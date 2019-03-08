@@ -73,7 +73,7 @@ mod tests {
         let mut root = mpt.default_root();
 
         for i in 0..64 {
-            root = mpt.set(root, i, i);
+            root = mpt.set(root, i, i).unwrap();
         }
         for i in 0..64 {
             assert_eq!(mpt.get(root, i), Ok(&i));
@@ -87,7 +87,7 @@ mod tests {
         }
 
         for i in 64..128 {
-            temp_root = temp_mpt.set(temp_root, i, i);
+            temp_root = temp_mpt.set(temp_root, i, i).unwrap();
         }
 
         for i in 0..128 {

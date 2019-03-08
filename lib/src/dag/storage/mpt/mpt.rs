@@ -243,19 +243,19 @@ mod tests {
     fn test_mpt_get_set() {
         let mut mpt: MerklePatriciaTree<u64, _> = MerklePatriciaTree::new(HashMap::new());
         let mut root = mpt.default_root();
-        root = mpt.set(root, 0x1234_5678_9ABC_DEF0, 0);
+        root = mpt.set(root, 0x1234_5678_9ABC_DEF0, 0).unwrap();
         assert_eq!(mpt.get(root, 0x1234_5678_9ABC_DEF0), Ok(&0));
 
-        root = mpt.set(root, 0, 0);
+        root = mpt.set(root, 0, 0).unwrap();
         assert_eq!(mpt.get(root, 0), Ok(&0));
-        root = mpt.set(root, 1, 0);
+        root = mpt.set(root, 1, 0).unwrap();
         assert_eq!(mpt.get(root, 1), Ok(&0));
-        root = mpt.set(root, 2, 100);
+        root = mpt.set(root, 2, 100).unwrap();
         assert_eq!(mpt.get(root, 2), Ok(&100));
-        root = mpt.set(root, u64::max_value(), u64::max_value());
+        root = mpt.set(root, u64::max_value(), u64::max_value()).unwrap();
         assert_eq!(mpt.get(root, u64::max_value()), Ok(&u64::max_value()));
         for i in 8..64 {
-            root = mpt.set(root, i, i);
+            root = mpt.set(root, i, i).unwrap();
         }
         for i in 8..64 {
             assert_eq!(mpt.get(root, i), Ok(&i));
@@ -266,22 +266,22 @@ mod tests {
     fn test_mpt_merge() {
         let mut mpt: MerklePatriciaTree<u64, _> = MerklePatriciaTree::new(HashMap::new());
         let mut root = mpt.default_root();
-        root = mpt.set(root, 0, 0);
+        root = mpt.set(root, 0, 0).unwrap();
         assert_eq!(mpt.get(root, 0), Ok(&0));
 
         let mut root_a;
         let mut root_b;
 
         // Invalid merge, key 1 modified in both
-        root_a = mpt.set(root, 1, 1);
-        root_b = mpt.set(root, 1, 2);
+        root_a = mpt.set(root, 1, 1).unwrap();
+        root_b = mpt.set(root, 1, 2).unwrap();
 
         assert_eq!(mpt.try_merge(root_a, root_b, root), None);
 
         // Valid merges, different keys
-        root_a = mpt.set(root, 1, 1);
+        root_a = mpt.set(root, 1, 1).unwrap();
         for i in 2..128 {
-            root_b = mpt.set(root, i, i);
+            root_b = mpt.set(root, i, i).unwrap();
 
             let updates = mpt.try_merge(root_a, root_b, root).unwrap();
             let new_root = updates.get_root_hash();

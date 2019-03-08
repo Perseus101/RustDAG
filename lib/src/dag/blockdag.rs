@@ -497,8 +497,7 @@ mod tests {
             assert_eq!(TransactionStatus::Accepted,
                 dag.get_confirmation_status(transaction.get_hash()));
 
-            let contract = dag.get_contract(contract_id).unwrap();
-            //assert_eq!(new_value, contract.get_state().int32[0]);
+            dag.get_contract(contract_id).unwrap();
         }
     }
 }
