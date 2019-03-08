@@ -6,7 +6,7 @@ extern crate rustdag_lib;
 use rustdag_lib::{util, security, dag};
 
 use dag::transaction::{Transaction, data::TransactionData};
-use dag::contract::{Contract, ContractValue};
+use dag::contract::ContractValue;
 use dag::contract::source::ContractSource;
 
 use util::peer::Peer;
@@ -81,7 +81,7 @@ fn main() {
 
     let mut trunk_hash = contract_id;
     // Execute the contract grant function
-    let mut contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
+    // let mut contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
     for data in [
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(1), ContractValue::U64(101)]),
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(2), ContractValue::U64(102)]),

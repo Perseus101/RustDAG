@@ -29,7 +29,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         let hash = root.get_hash();
         nodes.set(hash, root);
         MerklePatriciaTree {
-            nodes: nodes,
+            nodes,
             phantom: PhantomData
         }
     }
@@ -128,13 +128,13 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         Ok(())
     }
 
-    pub fn set(&mut self, root: u64, k: u64, v: T) -> u64 {
+    pub fn set(&mut self, root: u64, k: u64, v: T) -> Result<u64, MapError> {
         let updates = {
             self.try_set(root, k, v)
         };
         let new_root = updates.get_root_hash();
-        self.commit_set(updates);
-        new_root
+        self.commit_set(updates)?;
+        Ok(new_root)
     }
 
     pub fn try_merge(&self, hash_a: u64, hash_b: u64, hash_ref: u64)

@@ -29,7 +29,7 @@ pub trait Map<K: Eq + Hash, V> {
     fn set(&mut self, k: K, v: V) -> MapResult<()>;
 }
 
-impl<K: Eq + Hash, V> Map<K, V> for HashMap<K, V> {
+impl<K: Eq + Hash, V, S: std::hash::BuildHasher> Map<K, V> for HashMap<K, V, S> {
     fn get(&self, k: &K) -> MapResult<&V> {
         HashMap::get(self, k).map_or(Err(MapError::NotFound), |v| { Ok(v) })
     }

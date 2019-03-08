@@ -44,7 +44,7 @@ impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
 			transactions: HashMap::new(),
             pending_transactions: HashMap::new(),
             contracts: HashMap::new(),
-            storage: storage,
+            storage,
             milestones: MilestoneTracker::new(genesis_milestone),
             tips: Vec::new(),
 		};
@@ -55,7 +55,7 @@ impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
         let genesis_branch_hash = genesis_branch.get_hash();
 
         dag.transactions.insert(genesis_transaction_hash, genesis_transaction);
-        dag.pending_transactions.insert(genesis_branch_hash, genesis_branch.into());
+        dag.pending_transactions.insert(genesis_branch_hash, genesis_branch);
         dag.tips.push(genesis_transaction_hash);
         dag.tips.push(genesis_branch_hash);
 

@@ -19,7 +19,7 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
         }
     }
 
-    pub fn write_out(mut self, root: &u64) -> MapResult<NodeUpdates<T>> {
+    pub fn write_out(mut self, root: u64) -> MapResult<NodeUpdates<T>> {
         /// Move root and all its children from nodes_in to nodes out
         fn move_nodes<T: MPTData>(root: Node<T>, nodes_in: &mut HashMap<u64, Node<T>>,
                 nodes_out: &mut Vec<Node<T>>) {
@@ -42,7 +42,7 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
         }
 
         let mut branches = Vec::new();
-        let root = self.new_nodes.remove(root)
+        let root = self.new_nodes.remove(&root)
             .map_or(Err(MapError::NotFound), |node| { Ok(node) })?;
 
         move_nodes_recurse(&root, &mut self.new_nodes, &mut branches);
