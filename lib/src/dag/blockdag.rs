@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rand::{Rng,thread_rng};
 
 use dag::transaction::{Transaction, data::TransactionData};
-use dag::contract::{Contract, ContractValue, state::cache::ContractStateStorage};
+use dag::contract::{Contract, ContractValue, state::ContractStateStorage};
 use dag::milestone::Milestone;
 use dag::milestone::pending::{
     MilestoneSignature,
@@ -33,7 +33,7 @@ pub struct BlockDAG<M: ContractStateStorage> {
 
 impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
 	fn default() -> Self {
-        let storage = MerklePatriciaTree::new(Default::default());
+        let storage = MerklePatriciaTree::default();
         let default_root = storage.default_root();
 
         let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH,
@@ -124,7 +124,9 @@ impl<M: ContractStateStorage> BlockDAG<M> {
                     return TransactionStatus::Rejected("Invalid contract id".into());
                 }
                 if let Some(contract) = self.contracts.get(&transaction.get_contract()) {
-                    contract.exec(func_name, args, &self.storage, transaction.get_root());
+                    if contract.exec(func_name, args, &self.storage, transaction.get_root()).is_err() {
+                        return TransactionStatus::Rejected("Function failed to execute".into())
+                    }
                 }
             },
             TransactionData::Empty => {}
@@ -375,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_walk_search() {
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let dag = BlockDAG::<HashMap<_, _>>::default();
         let prev_milestone = dag.milestones.get_head_milestone();
 
         let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![],

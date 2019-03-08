@@ -9,8 +9,7 @@ use wasmi::{
 use dag::contract::resolver::*;
 use dag::contract::ContractValue;
 use dag::storage::mpt::{
-    MerklePatriciaTree, MPTStorageMap, NodeUpdates,
-    node::Node, temp_map::MPTTempMap
+    MerklePatriciaTree, MPTStorageMap, NodeUpdates, temp_map::MPTTempMap
 };
 
 use security::hash::hasher::Sha3Hasher;
@@ -274,7 +273,7 @@ mod tests {
         };
 
         root = updates.get_root_hash();
-        mpt.commit_set(updates);
+        assert!(mpt.commit_set(updates).is_ok());
 
         // Assert the value is set
         {
@@ -301,7 +300,7 @@ mod tests {
         };
 
         root = updates.get_root_hash();
-        mpt.commit_set(updates);
+        assert!(mpt.commit_set(updates).is_ok());
 
         assert_eq!(mpt.get(root, get_key(0, 0)), Ok(&ContractValue::U32(15)));
         assert_eq!(mpt.get(root, get_key(1, 0)), Ok(&ContractValue::U32(100)));
@@ -337,7 +336,7 @@ mod tests {
         };
 
         root = updates.get_root_hash();
-        mpt.commit_set(updates);
+        assert!(mpt.commit_set(updates).is_ok());
 
         {
             let mut temp_state = CachedContractState::new(&module,
@@ -367,7 +366,7 @@ mod tests {
         };
 
         root = updates.get_root_hash();
-        mpt.commit_set(updates);
+        assert!(mpt.commit_set(updates).is_ok());
 
         {
             let mut temp_state = CachedContractState::new(&module,
@@ -397,7 +396,7 @@ mod tests {
         };
 
         root = updates.get_root_hash();
-        mpt.commit_set(updates);
+        assert!(mpt.commit_set(updates).is_ok());
 
         {
             let mut temp_state = CachedContractState::new(&module,
@@ -429,8 +428,7 @@ mod tests {
         };
 
         root = updates.get_root_hash();
-        mpt.commit_set(updates);
-
+        assert!(mpt.commit_set(updates).is_ok());
 
         let updates = {
             let mut temp_state = CachedContractState::new(&module,
@@ -441,7 +439,7 @@ mod tests {
         };
 
         root = updates.get_root_hash();
-        mpt.commit_set(updates);
+        assert!(mpt.commit_set(updates).is_ok());
         assert_eq!(mpt.get(root, get_mapping_key(0, 0, contract_id)), Ok(&ContractValue::U64(0)));
         assert_eq!(mpt.get(root, get_mapping_key(0, 1, contract_id)), Ok(&ContractValue::U64(10)));
 

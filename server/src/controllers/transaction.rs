@@ -32,6 +32,6 @@ fn post_transaction(transaction: Json<Transaction>, dag: State<DAGManager>) -> J
 }
 
 #[post("/hex", data = "<transaction>")]
-fn post_hex_transaction(transaction: Json<HexEncodedTransaction>, dag: State<DAGManager>) -> Json<TransactionStatus> {
+fn post_hex_transaction( transaction: Json<HexEncodedTransaction>, dag: State<DAGManager>) -> Json<TransactionStatus> {
     Json(dag.inner().add_transaction(transaction.into_inner().into()))
 }

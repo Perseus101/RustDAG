@@ -27,7 +27,7 @@ fn confirm_transactions(server: &Peer) {
 
                 let mut transaction = Transaction::create(
                     tip_hashes.branch_hash, tip_hashes.trunk_hash, vec![],
-                    0, nonce, TransactionData::Empty
+                    0, nonce, 0, TransactionData::Empty
                 );
 
                 transaction.sign(&mut pk);
@@ -62,7 +62,7 @@ fn main() {
 
             let mut transaction = Transaction::create(
                 tip_hashes.branch_hash, tip_hashes.trunk_hash, vec![], 0,
-                trunk_nonce, TransactionData::GenContract(contract_src.clone())
+                trunk_nonce, 0, TransactionData::GenContract(contract_src.clone())
             );
 
             transaction.sign(&mut pk);
@@ -81,7 +81,7 @@ fn main() {
 
     let mut trunk_hash = contract_id;
     // Execute the contract grant function
-    let mut contract: Contract = Contract::new(contract_src).expect("Failed to create contract");
+    let mut contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
     for data in [
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(1), ContractValue::U64(101)]),
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(2), ContractValue::U64(102)]),
@@ -100,22 +100,22 @@ fn main() {
             let mut pk = PrivateKey::new(&SHA512_256);
             let mut transaction = Transaction::create(
                 tip_hashes.branch_hash, trunk_hash, vec![],
-                contract_id, trunk_nonce, data.clone()
+                contract_id, trunk_nonce, 0, data.clone()
             );
             transaction.sign(&mut pk);
             trunk_hash = transaction.get_hash();
             print!("Transaction {}: ", transaction.get_hash());
-            if let TransactionData::ExecContract(func_name, args) = data {
-                match contract.exec(func_name, &args) {
-                    Err(err) => {
-                        println!("Execution error: {:?}", err);
-                    },
-                    Ok((ret, state)) => {
-                        println!("{:?}", ret);
-                        contract.writeback(state).expect("Error writing out cache");
-                    }
-                }
-            }
+            // if let TransactionData::ExecContract(func_name, args) = data {
+            //     match contract.exec(func_name, &args) {
+            //         Err(err) => {
+            //             println!("Execution error: {:?}", err);
+            //         },
+            //         Ok((ret, state)) => {
+            //             println!("{:?}", ret);
+            //             contract.writeback(state).expect("Error writing out cache");
+            //         }
+            //     }
+            // }
             match server.post_transaction(&transaction) {
                 TransactionStatus::Milestone => println!("Milestone"),
                 TransactionStatus::Rejected(message) => println!("Rejected: {:?}", message),

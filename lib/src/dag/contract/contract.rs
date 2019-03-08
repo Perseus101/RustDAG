@@ -11,7 +11,7 @@ use dag::storage::mpt::{MerklePatriciaTree, temp_map::MPTTempMap};
 use super::source::ContractSource;
 use super::error::ContractError;
 use super::resolver::get_imports_builder;
-use super::state::cache::{CachedContractState, ContractStateStorage};
+use super::state::{CachedContractState, ContractStateStorage};
 
 /// Represents the values that can be passed to a contract
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -108,7 +108,7 @@ mod tests {
     use std::io::Read;
     use std::collections::HashMap;
 
-    use dag::contract::state::cache::{get_key, get_mapping_key};
+    use dag::contract::state::{get_key, get_mapping_key};
 
     #[test]
     fn test_exec_contract() {

@@ -15,6 +15,12 @@ pub struct MerklePatriciaTree<T: MPTData, M: MPTStorageMap<T>> {
     phantom: PhantomData<T>,
 }
 
+impl<T: MPTData, M: MPTStorageMap<T> + Default> Default for MerklePatriciaTree<T, M> {
+    fn default() -> Self {
+        Self::new(M::default())
+    }
+}
+
 impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
 
     #[allow(unused_must_use)]
@@ -115,10 +121,11 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         }
     }
 
-    pub fn commit_set(&mut self, updates: NodeUpdates<T>) {
+    pub fn commit_set(&mut self, updates: NodeUpdates<T>) -> Result<(), MapError> {
         for node in updates.into_iter() {
-            self.nodes.set(node.get_hash(), node);
+            self.nodes.set(node.get_hash(), node)?;
         }
+        Ok(())
     }
 
     pub fn set(&mut self, root: u64, k: u64, v: T) -> u64 {
@@ -278,7 +285,7 @@ mod tests {
 
             let updates = mpt.try_merge(root_a, root_b, root).unwrap();
             let new_root = updates.get_root_hash();
-            mpt.commit_set(updates);
+            assert!(mpt.commit_set(updates).is_ok());
             assert_eq!(mpt.get(new_root, i), Ok(&i));
         }
     }
