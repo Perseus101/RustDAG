@@ -11,6 +11,7 @@ use dag::contract::ContractValue;
 use dag::storage::mpt::{
     MerklePatriciaTree, MPTStorageMap, NodeUpdates, temp_map::MPTTempMap
 };
+use dag::storage::map::MapResult;
 
 use security::hash::hasher::Sha3Hasher;
 
@@ -70,8 +71,8 @@ impl<'a, M: ContractStateStorage> CachedContractState<'a, M> {
         self.module.invoke_export(func_name, args, self)
     }
 
-    pub fn updates(self) -> Option<NodeUpdates<ContractValue>> {
-        self.state.inner_map().write_out(&self.root).ok()
+    pub fn updates(self) -> MapResult<NodeUpdates<ContractValue>> {
+        self.state.inner_map().write_out(&self.root)
     }
 
     fn get_key(&self, index: u32) -> u64 {

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use dag::{
     blockdag::BlockDAG,
-    transaction::Transaction,
+    transaction::{Transaction, error::TransactionError},
     contract::{Contract, ContractValue, state::ContractStateStorage},
     storage::mpt::node::Node,
     milestone::pending::MilestoneSignature
@@ -53,59 +53,70 @@ impl<M: 'static + ContractStateStorage + Default> GenericDAGManager<M> {
             // Ignore any already known transactions
             let current_status = self.dag.read().unwrap()
                 .get_confirmation_status(hash);
-            if current_status == TransactionStatus::Pending ||
+            if current_status == TransactionStatus::Accepted ||
+                    current_status == TransactionStatus::Pending ||
                     current_status == TransactionStatus::Milestone {
                 return current_status;
             }
         }
 
-        let status: TransactionStatus;
-        {
-            // Scope the dag write so that it is opened and closed quickly
-            status = self.dag.write().unwrap().add_transaction(&transaction);
-        }
-        if status == TransactionStatus::Pending ||
-                status == TransactionStatus::Milestone {
-            self.peers.read().unwrap().map_peers(|peer| {
-                peer.post_transaction(&transaction)
-            });
-            if status == TransactionStatus::Milestone {
-                let dag = Arc::clone(&self.dag);
-                thread::spawn(move || {
-                    let mut chain: Vec<Transaction>;
-                    let milestone_hash = transaction.get_hash();
-                    {
-                        // Verify milestone
-                        match dag.read().unwrap().verify_milestone(transaction) {
-                            Ok(_chain) => {
-                                chain = _chain;
-                            },
-                            Err(_err) => {
-                                // TODO missing transactions
-                                panic!("Missing Transactions: {:?}", _err);
-                            }
+
+        let dag_read = self.dag.read().unwrap();
+        match dag_read.try_add_transaction(&transaction) {
+            Ok(updates) => {
+                drop(dag_read);
+                let mut dag_write = self.dag.write().unwrap();
+                match dag_write.commit_transaction(transaction.clone(), updates) {
+                    Ok(status) => {
+                        self.peers.read().unwrap().map_peers(|peer| {
+                            peer.post_transaction(&transaction)
+                        });
+                        if status == TransactionStatus::Milestone {
+                            let dag = Arc::clone(&self.dag);
+                            thread::spawn(move || {
+                                let mut chain: Vec<Transaction>;
+                                let milestone_hash = transaction.get_hash();
+                                {
+                                    // Verify milestone
+                                    match dag.read().unwrap().verify_milestone(transaction) {
+                                        Ok(_chain) => {
+                                            chain = _chain;
+                                        },
+                                        Err(_err) => {
+                                            // TODO missing transactions
+                                            panic!("Missing Transactions: {:?}", _err);
+                                        }
+                                    }
+                                    // Reverse the chain so that the elements closest to the
+                                    // milestone are in front
+                                    chain = chain.into_iter().rev().collect();
+                                }
+                                {
+                                    // Add chain
+                                    let mut dag = dag.write().unwrap();
+                                    dag.process_chain(milestone_hash, chain);
+                                    if true {
+                                        // Sign all existing contracts
+                                        // TODO Proper signing
+                                        dag.add_pending_signature(MilestoneSignature::new(hash, 0, 0));
+                                        for contract in dag.get_contracts() {
+                                            dag.add_pending_signature(MilestoneSignature::new(hash, contract, 0));
+                                        }
+                                    }
+                                }
+                            });
                         }
-                        // Reverse the chain so that the elements closest to the
-                        // milestone are in front
-                        chain = chain.into_iter().rev().collect();
+                        status
+                    },
+                    Err(TransactionError::Rejected(msg)) => {
+                        TransactionStatus::Rejected(msg)
                     }
-                    {
-                        // Add chain
-                        let mut dag = dag.write().unwrap();
-                        dag.process_chain(milestone_hash, chain);
-                        if true {
-                            // Sign all existing contracts
-                            // TODO Proper signing
-                            dag.add_pending_signature(MilestoneSignature::new(hash, 0, 0));
-                            for contract in dag.get_contracts() {
-                                dag.add_pending_signature(MilestoneSignature::new(hash, contract, 0));
-                            }
-                        }
-                    }
-                });
+                }
+            },
+            Err(TransactionError::Rejected(msg)) => {
+                TransactionStatus::Rejected(msg)
             }
         }
-        status
     }
 
     // Peer functions
