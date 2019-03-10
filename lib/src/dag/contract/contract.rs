@@ -11,7 +11,7 @@ use dag::storage::mpt::{MerklePatriciaTree, NodeUpdates, temp_map::MPTTempMap};
 use super::source::ContractSource;
 use super::error::ContractError;
 use super::resolver::get_imports_builder;
-use super::state::{CachedContractState, ContractStateStorage};
+use super::state::{ContractState, ContractStateStorage};
 
 /// Represents the values that can be passed to a contract
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -70,11 +70,17 @@ pub struct Contract {
 }
 
 impl Contract {
-    pub fn new(src: ContractSource, id: u64) -> Result<Self, ContractError> {
-        Ok(Contract {
+    pub fn new<'a, M: ContractStateStorage>(src: ContractSource, id: u64,
+            storage: &'a MerklePatriciaTree<ContractValue, M>, root: u64)
+            -> Result<(Self, NodeUpdates<ContractValue>), ContractError> {
+        let contract = Contract {
             src,
             id
-        })
+        };
+
+        let (_, updates) = contract.exec("init", &Vec::new(), storage, root)?;
+
+        Ok((contract, updates))
     }
 
     fn get_module(&self) -> Result<ModuleRef, ContractError> {
@@ -84,8 +90,8 @@ impl Contract {
 
     fn build_state<'a, M: ContractStateStorage>(&self, module: &'a ModuleRef,
             storage: &'a MerklePatriciaTree<ContractValue, M>, root: u64)
-            -> Result<CachedContractState<'a, M>, ContractError> {
-        Ok(CachedContractState::new(module,
+            -> Result<ContractState<'a, M>, ContractError> {
+        Ok(ContractState::new(module,
             MerklePatriciaTree::new(MPTTempMap::new(storage)), self.id, root))
     }
 
@@ -112,7 +118,7 @@ impl Contract {
     }
 
     fn exec_from_state<M: ContractStateStorage>(&self,
-            func_name: &str, args: &[ContractValue], state: &mut CachedContractState<M>)
+            func_name: &str, args: &[ContractValue], state: &mut ContractState<M>)
             -> Result<Option<ContractValue>, ContractError> {
         let return_value = state.exec(func_name, &args.iter()
             .map(|x| RuntimeValue::from(x.clone())).collect::<Vec<_>>())?
@@ -141,9 +147,10 @@ mod tests {
         let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);
         file.read_to_end(&mut buf).expect("Could not read test file");
 
-        let contract = Contract::new(ContractSource::new(&buf), 0).expect("Failed to create contract");
         let mut storage = MerklePatriciaTree::<ContractValue, _>::new(HashMap::new());
         let mut root = storage.default_root();
+        let (contract, updates) = Contract::new(ContractSource::new(&buf), 0, &storage, root).expect("Failed to create contract");
+        assert!(storage.commit_set(updates).is_ok());
 
         let values = vec![
             ContractValue::U32(1),

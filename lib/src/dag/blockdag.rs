@@ -119,8 +119,11 @@ impl<M: ContractStateStorage> BlockDAG<M> {
                     return Err(TransactionError::Rejected("Invalid gen contract id".into()));
                 }
                 // Generate a new contract
-                match Contract::new(src.clone(), hash) {
-                    Ok(contract) => { updates.add_contract(contract) },
+                match Contract::new(src.clone(), hash, &self.storage, transaction.get_root()) {
+                    Ok((contract, node_updates)) => {
+                        updates.add_contract(contract);
+                        updates.add_node_updates(node_updates);
+                    },
                     Err(_) => return Err(TransactionError::Rejected("Invalid contract".into())),
                 }
             },
@@ -134,9 +137,8 @@ impl<M: ContractStateStorage> BlockDAG<M> {
                         Ok((_val, node_updates)) => {
                             updates.add_node_updates(node_updates);
                         },
-                        Err(_err) => {
-                            // TODO Log error
-                            return Err(TransactionError::Rejected("Function failed to execute".into()));
+                        Err(err) => {
+                            return Err(TransactionError::Rejected(format!("Function failed to execute: {:?}", err)));
                         }
                     }
                 }

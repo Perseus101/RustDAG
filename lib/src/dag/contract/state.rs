@@ -35,20 +35,20 @@ pub fn get_mapping_key(index: u32, key: u64, contract: u64) -> u64 {
 ///
 /// Uses copy on write to only store updated state, and holds a reference to the
 /// original contract state to access unmodified state.
-pub struct CachedContractState<'a, M: ContractStateStorage> {
+pub struct ContractState<'a, M: ContractStateStorage> {
     module: &'a ModuleRef,
     state: MerklePatriciaTree<ContractValue, MPTTempMap<'a, ContractValue, M>>,
     contract: u64,
     root: u64,
 }
 
-impl<'a, M: ContractStateStorage> CachedContractState<'a, M> {
+impl<'a, M: ContractStateStorage> ContractState<'a, M> {
 
     /// Create a new cached state from a contract state
     pub fn new(module: &'a ModuleRef,
             state: MerklePatriciaTree<ContractValue, MPTTempMap<'a, ContractValue, M>>,
             contract: u64, root: u64) -> Self {
-        CachedContractState {
+        ContractState {
             module,
             state,
             contract,
@@ -158,7 +158,7 @@ impl<'a, M: ContractStateStorage> CachedContractState<'a, M> {
     }
 }
 
-impl<'a, M: ContractStateStorage> Externals for CachedContractState<'a, M> {
+impl<'a, M: ContractStateStorage> Externals for ContractState<'a, M> {
     fn invoke_index(
         &mut self,
         index: usize,
@@ -265,7 +265,7 @@ mod tests {
 
         // Update a single value
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_u32",
                 &[RuntimeValue::I32(0), RuntimeValue::I32(10)]).is_ok());
@@ -278,7 +278,7 @@ mod tests {
 
         // Assert the value is set
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_u32", &[RuntimeValue::I32(2)]).is_err());
@@ -291,7 +291,7 @@ mod tests {
 
         // Update multiple values
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_u32",
                 &[RuntimeValue::I32(0), RuntimeValue::I32(15)]).is_ok());
@@ -307,7 +307,7 @@ mod tests {
         assert_eq!(mpt.get(root, get_key(1, 0)), Ok(&ContractValue::U32(100)));
         // Assert the values are changed
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_u32", &[RuntimeValue::I32(2)]).is_err());
@@ -329,7 +329,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_u64",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(10)]).is_ok());
@@ -340,7 +340,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_u64", &[RuntimeValue::I32(1)]).is_err());
@@ -359,7 +359,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_f32",
                 &[RuntimeValue::I32(0), RuntimeValue::F32(10f32.into())]).is_ok());
@@ -370,7 +370,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_f32", &[RuntimeValue::I32(1)]).is_err());
@@ -389,7 +389,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_f64",
                 &[RuntimeValue::I32(0), RuntimeValue::F64(10f64.into())]).is_ok());
@@ -400,7 +400,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_f64", &[RuntimeValue::I32(1)]).is_err());
@@ -419,7 +419,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("get_mapping",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(0)]).is_err());
@@ -432,7 +432,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_mapping",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(1), RuntimeValue::I64(10)]).is_ok());
@@ -445,7 +445,7 @@ mod tests {
         assert_eq!(mpt.get(root, get_mapping_key(0, 1, contract_id)), Ok(&ContractValue::U64(10)));
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert_eq!(Some(RuntimeValue::I64(0)), temp_state.exec("get_mapping",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(0)]).unwrap());
