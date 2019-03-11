@@ -6,7 +6,7 @@ extern crate rustdag_lib;
 use rustdag_lib::{util, security, dag};
 
 use dag::transaction::{Transaction, data::TransactionData};
-use dag::contract::{Contract, ContractValue};
+use dag::contract::ContractValue;
 use dag::contract::source::ContractSource;
 
 use util::peer::Peer;
@@ -14,33 +14,6 @@ use util::types::TransactionStatus;
 use security::ring::digest::SHA512_256;
 use security::hash::proof::proof_of_work;
 use security::keys::PrivateKey;
-
-fn confirm_transactions(server: &Peer) {
-    print!("Confirming");
-    loop {
-        let tip_hashes = server.get_tips();
-        if let Some(trunk) = server.get_transaction(tip_hashes.trunk_hash) {
-            if let Some(branch) = server.get_transaction(tip_hashes.branch_hash) {
-                let nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
-
-                let mut pk = PrivateKey::new(&SHA512_256);
-
-                let mut transaction = Transaction::create(
-                    tip_hashes.branch_hash, tip_hashes.trunk_hash, vec![],
-                    0, nonce, 0, TransactionData::Empty
-                );
-
-                transaction.sign(&mut pk);
-
-                if server.post_transaction(&transaction) == TransactionStatus::Milestone {
-                    println!("\nConfirmed.");
-                    break;
-                }
-                print!(".");
-            }
-        }
-    }
-}
 
 fn main() {
     let server = Peer::new(String::from("http://localhost:4200"));
@@ -75,13 +48,9 @@ fn main() {
         }
     }
 
-    // Send empty transactions until the contract is confirmed
-    println!("Contract {} sent, awaiting confirmation...", contract_id);
-    confirm_transactions(&server);
-
     let mut trunk_hash = contract_id;
     // Execute the contract grant function
-    let mut contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
+    // let contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
     for data in [
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(1), ContractValue::U64(101)]),
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(2), ContractValue::U64(102)]),
@@ -105,17 +74,7 @@ fn main() {
             transaction.sign(&mut pk);
             trunk_hash = transaction.get_hash();
             print!("Transaction {}: ", transaction.get_hash());
-            // if let TransactionData::ExecContract(func_name, args) = data {
-            //     match contract.exec(func_name, &args) {
-            //         Err(err) => {
-            //             println!("Execution error: {:?}", err);
-            //         },
-            //         Ok((ret, state)) => {
-            //             println!("{:?}", ret);
-            //             contract.writeback(state).expect("Error writing out cache");
-            //         }
-            //     }
-            // }
+
             match server.post_transaction(&transaction) {
                 TransactionStatus::Milestone => println!("Milestone"),
                 TransactionStatus::Rejected(message) => println!("Rejected: {:?}", message),
@@ -123,5 +82,5 @@ fn main() {
             }
         }
     }
-    confirm_transactions(&server);
+
 }

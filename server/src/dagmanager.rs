@@ -2,9 +2,10 @@ use std::sync::RwLock;
 use std::thread;
 use std::sync::Arc;
 use std::collections::HashMap;
+use std::marker::{Send, Sync};
 
 use dag::{
-    blockdag::BlockDAG,
+    blockdag::{BlockDAG, TransactionStorage, ContractStorage},
     transaction::{Transaction, error::TransactionError},
     contract::{Contract, ContractValue, state::ContractStateStorage},
     storage::mpt::node::Node,
@@ -14,14 +15,17 @@ use peermanager::PeerManager;
 use util::peer::Peer;
 use util::types::{TransactionHashes,TransactionStatus};
 
-pub type DAGManager = GenericDAGManager<HashMap<u64, Node<ContractValue>>>;
+pub type DAGManager = GenericDAGManager<HashMap<u64, Node<ContractValue>>,
+    HashMap<u64, Transaction>, HashMap<u64, Contract>>;
 
-pub struct GenericDAGManager<M: ContractStateStorage + Default> {
-    dag: Arc<RwLock<BlockDAG<M>>>,
+pub struct GenericDAGManager<M: ContractStateStorage, T: TransactionStorage,
+        C: ContractStorage> {
+    dag: Arc<RwLock<BlockDAG<M, T, C>>>,
     peers: RwLock<PeerManager>,
 }
 
-impl<M: ContractStateStorage + Default> Default for GenericDAGManager<M> {
+impl<M: ContractStateStorage + Default, T: TransactionStorage + Default,
+        C: ContractStorage + Default> Default for GenericDAGManager<M, T, C> {
 	fn default() -> Self {
         GenericDAGManager {
             dag: Arc::new(RwLock::from(BlockDAG::default())),
@@ -30,7 +34,9 @@ impl<M: ContractStateStorage + Default> Default for GenericDAGManager<M> {
     }
 }
 
-impl<M: 'static + ContractStateStorage + Default> GenericDAGManager<M> {
+impl<M: 'static + ContractStateStorage + Send + Sync,
+        T: 'static + TransactionStorage + Send + Sync>
+        GenericDAGManager<M, T, HashMap<u64, Contract>> {
     pub fn get_tips(&self) -> TransactionHashes {
         self.dag.read().unwrap().get_tips()
     }
