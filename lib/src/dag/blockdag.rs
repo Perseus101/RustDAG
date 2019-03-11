@@ -14,6 +14,7 @@ use dag::milestone::pending::{
     MilestoneTracker
 };
 use dag::storage::mpt::MerklePatriciaTree;
+use dag::storage::map::Map;
 
 use super::incomplete_chain::IncompleteChain;
 
@@ -26,18 +27,30 @@ const GENESIS_HASH: u64 = 0;
 const MILESTONE_NONCE_MIN: u32 = 100_000;
 const MILESTONE_NONCE_MAX: u32 = 200_000;
 
-pub struct BlockDAG<M: ContractStateStorage> {
-    transactions: HashMap<u64, Transaction>,
+pub trait TransactionStorage = Map<u64, Transaction>;
+pub trait ContractStorage = Map<u64, Contract>;
+
+pub struct BlockDAG<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> {
+    transactions: T,
     pending_transactions: HashMap<u64, Transaction>,
-    contracts: HashMap<u64, Contract>,
+    contracts: C,
     storage: MerklePatriciaTree<ContractValue, M>,
     milestones: MilestoneTracker,
     tips: Vec<u64>,
 }
 
-impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
-	fn default() -> Self {
-        let storage = MerklePatriciaTree::default();
+impl<M: ContractStateStorage + Default, T: TransactionStorage + Default,
+        C: ContractStorage + Default> Default for BlockDAG<M, T, C> {
+    fn default() -> Self {
+        Self::new(T::default(), C::default(), M::default())
+    }
+}
+
+impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDAG<M, T, C> {
+
+    #[allow(unused_must_use)]
+	pub fn new(transaction_storage: T, contract_storage: C, state_storage: M) -> Self {
+        let storage = MerklePatriciaTree::new(state_storage);
         let default_root = storage.default_root();
 
         let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH,
@@ -45,9 +58,9 @@ impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
         let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
 
 		let mut dag = BlockDAG {
-			transactions: HashMap::new(),
-            pending_transactions: HashMap::new(),
-            contracts: HashMap::new(),
+			transactions: transaction_storage,
+            pending_transactions: HashMap::default(),
+            contracts: contract_storage,
             storage: storage,
             milestones: MilestoneTracker::new(genesis_milestone),
             tips: Vec::new(),
@@ -58,16 +71,13 @@ impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
             genesis_transaction_hash, vec![], 0, 0, 0, default_root, TransactionData::Genesis);
         let genesis_branch_hash = genesis_branch.get_hash();
 
-        dag.transactions.insert(genesis_transaction_hash, genesis_transaction);
-        dag.pending_transactions.insert(genesis_branch_hash, genesis_branch.into());
+        dag.transactions.set(genesis_transaction_hash, genesis_transaction);
+        dag.pending_transactions.set(genesis_branch_hash, genesis_branch.into());
         dag.tips.push(genesis_transaction_hash);
         dag.tips.push(genesis_branch_hash);
 
         dag
 	}
-}
-
-impl<M: ContractStateStorage> BlockDAG<M> {
 
     /// Try to add a transaction to the dag
     ///
@@ -132,7 +142,7 @@ impl<M: ContractStateStorage> BlockDAG<M> {
                         && trunk_transaction.get_contract() != 0 {
                     return Err(TransactionError::Rejected("Invalid contract id".into()));
                 }
-                if let Some(contract) = self.contracts.get(&transaction.get_contract()) {
+                if let Ok(contract) = self.contracts.get(&transaction.get_contract()) {
                     match contract.exec(func_name, args, &self.storage, transaction.get_root()) {
                         Ok((_val, node_updates)) => {
                             updates.add_node_updates(node_updates);
@@ -163,11 +173,11 @@ impl<M: ContractStateStorage> BlockDAG<M> {
         if let Some(updates) = updates.node_updates {
             self.storage.commit_set(updates)?;
         }
+        if let Some(contract) = updates.contract {
+            self.contracts.set(hash, contract)?;
+        }
         for t in updates.referenced {
             self.tips.remove_item(&t);
-        }
-        if let Some(contract) = updates.contract {
-            self.contracts.insert(hash, contract);
         }
 
 
@@ -179,7 +189,7 @@ impl<M: ContractStateStorage> BlockDAG<M> {
                 res = TransactionStatus::Milestone;
         }
 
-        self.pending_transactions.insert(hash, transaction);
+        self.pending_transactions.set(hash, transaction)?;
         self.tips.push(hash);
 
         return Ok(res);
@@ -278,11 +288,12 @@ impl<M: ContractStateStorage> BlockDAG<M> {
 
     /// Move all transactions referenced by transaction from
     /// pending_transactions to transactions
+    #[allow(unused_must_use)]
     fn confirm_transactions(&mut self, transaction: &Transaction) {
         for transaction_hash in transaction.get_all_refs() {
             if let Some(pending_transaction) = self.pending_transactions.remove(&transaction_hash) {
                 self.confirm_transactions(&pending_transaction);
-                self.transactions.insert(transaction_hash, pending_transaction);
+                self.transactions.set(transaction_hash, pending_transaction);
             }
         }
     }
@@ -290,7 +301,7 @@ impl<M: ContractStateStorage> BlockDAG<M> {
     /// Returns the transaction specified by hash
     pub fn get_transaction(&self, hash: u64) -> Option<&Transaction> {
         self.pending_transactions.get(&hash).map_or(
-            self.transactions.get(&hash), |pending_transaction| {
+            self.transactions.get(&hash).ok(), |pending_transaction| {
                 Some(pending_transaction)
             }
         )
@@ -301,7 +312,7 @@ impl<M: ContractStateStorage> BlockDAG<M> {
         if self.pending_transactions.get(&hash).is_some() {
             return TransactionStatus::Pending;
         }
-        if self.transactions.get(&hash).is_some() {
+        if self.transactions.get(&hash).is_ok() {
             return TransactionStatus::Accepted;
         }
         TransactionStatus::Rejected("Not accepted".into())
@@ -333,9 +344,11 @@ impl<M: ContractStateStorage> BlockDAG<M> {
     }
 
     pub fn get_contract(&self, id: u64) -> Option<&Contract> {
-        self.contracts.get(&id)
+        self.contracts.get(&id).ok()
     }
+}
 
+impl<M: ContractStateStorage, T: TransactionStorage> BlockDAG<M, T, HashMap<u64, Contract>> {
     // Get the hash id's of all the contracts stored on the dag
     pub fn get_contracts(&self) -> Vec<u64> {
         self.contracts.keys().cloned().collect()
@@ -343,7 +356,7 @@ impl<M: ContractStateStorage> BlockDAG<M> {
 }
 
 #[cfg(test)]
-impl<M: ContractStateStorage> BlockDAG<M> {
+impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDAG<M, T, C> {
     fn force_add_transaction(&mut self, transaction: Transaction) {
         let hash = transaction.get_hash();
         self.pending_transactions.insert(hash, transaction);
@@ -372,8 +385,9 @@ mod tests {
 
     const BASE_NONCE: u32 = 132;
 
-    fn insert_transaction<M: ContractStateStorage> (dag: &mut BlockDAG<M>, branch: u64, trunk: u64,
-            contract: u64, data: TransactionData) -> Transaction {
+    fn insert_transaction<M: ContractStateStorage, T: TransactionStorage,
+            C: ContractStorage> (dag: &mut BlockDAG<M, T, C>, branch: u64,
+            trunk: u64, contract: u64, data: TransactionData) -> Transaction {
         let transaction = Transaction::new(branch, trunk, Vec::new(),
             contract, 0, 0, 0, data);
         dag.force_add_transaction(transaction.clone());
@@ -382,7 +396,7 @@ mod tests {
 
     #[test]
     fn test_genesis_transactions() {
-        let dag = BlockDAG::<HashMap<_, _>>::default();
+        let dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let tips = dag.get_tips();
 
         if tips.trunk_hash == TRUNK_HASH {
@@ -396,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_add_transaction() {
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let mut key = PrivateKey::new(&SHA512_256);
         let data = TransactionData::Empty;
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
@@ -419,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_walk_search() {
-        let dag = BlockDAG::<HashMap<_, _>>::default();
+        let dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let prev_milestone = dag.milestones.get_head_milestone();
 
         let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![],
@@ -441,7 +455,7 @@ mod tests {
 
     #[test]
     fn test_add_milestone() {
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let data = TransactionData::GenContract(ContractSource::new(&vec![]));
         let middle_transaction = insert_transaction(&mut dag, 0, TRUNK_HASH, 1, data.clone());
         let transaction = insert_transaction(&mut dag, 0,
@@ -458,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_get_confirmation_status() {
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         assert_eq!(dag.get_confirmation_status(TRUNK_HASH), TransactionStatus::Accepted);
         assert_eq!(dag.get_confirmation_status(BRANCH_HASH), TransactionStatus::Pending);
         assert_eq!(dag.get_confirmation_status(10), TransactionStatus::Rejected("Not accepted".into()));
@@ -486,7 +500,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);
         file.read_to_end(&mut buf).expect("Could not read test file");
 
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let mpt_root = dag.get_transaction(TRUNK_HASH).unwrap().get_root();
         let contract_id;
         let trunk_hash;

@@ -128,6 +128,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         Ok(())
     }
 
+    #[allow(unused_must_use)]
     pub fn set(&mut self, root: u64, k: u64, v: T) -> u64 {
         let updates = {
             self.try_set(root, k, v)

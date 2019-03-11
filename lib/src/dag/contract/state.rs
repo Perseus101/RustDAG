@@ -1,5 +1,4 @@
 use std::hash::Hasher;
-use std::marker::{Send, Sync};
 
 use wasmi::{
     Error as InterpreterError, Trap, TrapKind, ModuleRef, Externals,
@@ -15,7 +14,7 @@ use dag::storage::map::MapResult;
 
 use security::hash::hasher::Sha3Hasher;
 
-pub trait ContractStateStorage = MPTStorageMap<ContractValue> + Send + Sync;
+pub trait ContractStateStorage = MPTStorageMap<ContractValue>;
 
 pub fn get_key(index: u32, contract: u64) -> u64 {
     let mut hasher = Sha3Hasher::new();

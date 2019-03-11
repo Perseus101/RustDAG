@@ -83,6 +83,13 @@ impl Contract {
         Ok((contract, updates))
     }
 
+    pub fn no_init(src: ContractSource, id: u64) -> Self {
+        Contract {
+            src,
+            id
+        }
+    }
+
     fn get_module(&self) -> Result<ModuleRef, ContractError> {
         let imports = get_imports_builder();
         Ok(ModuleInstance::new(&self.src.get_wasm_module()?, &imports)?.assert_no_start())
