@@ -2,7 +2,7 @@ use std::hash::Hash;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use dag::storage::map::{Map, MapError};
+use dag::storage::map::{Map, OOB, MapError};
 
 use super::node::{Node, PointerNode};
 use super::node_updates::NodeUpdates;
@@ -42,20 +42,29 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         self.nodes
     }
 
-    pub fn get(&self, root: u64, mut k: u64) -> Result<&T, MapError> {
-        let mut node = self.nodes.get(&root)?;
+    pub fn get<'a>(&'a self, root: u64, mut k: u64) -> Result<OOB<'a, T>, MapError> {
+        let mut node = Some(self.nodes.get(&root)?);
         // 16 branch nodes + 1 leaf node
         for _ in 0..17 {
-            match node {
-                Node::BranchNode(pointers) => {
+            //TODO: I couldn't find a good way to do this without duplicating the branch arms. Maybe refactor to function?
+            node = match node.take().unwrap() {
+                OOB::Owned(Node::BranchNode(pointers)) => {
                     let hash = pointers.get_next_hash(k)
                         .map_or(Err(MapError::NotFound), |hash| { Ok(hash) })?;
-                    node = self.nodes.get(&hash)?;
+                    Some(self.nodes.get(&hash)?)
                 },
-                Node::LeafNode(value) => {
-                    return Ok(value);
+                OOB::Borrowed(Node::BranchNode(pointers)) => {
+                    let hash = pointers.get_next_hash(k)
+                        .map_or(Err(MapError::NotFound), |hash| { Ok(hash) })?;
+                    Some(self.nodes.get(&hash)?)
+                },
+                OOB::Owned(Node::LeafNode(value)) => {
+                    return Ok(OOB::Owned(value));
+                },
+                OOB::Borrowed(Node::LeafNode(ref value)) => {
+                    return Ok(OOB::Borrowed(value));
                 }
-            }
+            };
             k <<= 4;
         }
         Err(MapError::LookupError)
@@ -66,7 +75,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         let root_node = self.nodes.get(&root)
             .expect("Root node does not exist");
         {
-            let mut node = root_node;
+            let mut loop_node = root_node;
             let mut key = k;
             let mut i = 1;
             // Insert clones of nodes on the path into new_nodes
@@ -74,18 +83,21 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 if i == 16 {
                     break;
                 }
-                match node {
+                let loop_to_new_node = match loop_node.borrow() {
                     Node::BranchNode(pointers) => {
                         if let Some(hash) = pointers.get_next_hash(key) {
-                            node = self.nodes.get(&hash).expect("Node does not exist");
+                            Some(self.nodes.get(&hash).expect("Node does not exist"))
                         }
                         else {
                             break;
                         }
                     },
                     _ => break,
+                };
+                if let Some(n) = loop_to_new_node {
+                    loop_node = n;
                 }
-                new_nodes.push(node.clone());
+                new_nodes.push(loop_node.borrow().clone());
                 key <<= 4;
                 i += 1;
             }
@@ -113,7 +125,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 key >>= 4;
             }
             new_nodes.push(leaf_node);
-            let mut new_root = root_node.clone();
+            let mut new_root = self.nodes.get(&root).expect("Root node does not exist").borrow().clone();
             if let Node::BranchNode(ref mut pointers) = new_root {
                 pointers.set_from(key, hash);
             }
@@ -142,14 +154,18 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
             -> Option<NodeUpdates<T>> {
         if hash_a == hash_b {
             return Some(NodeUpdates::new(self.nodes.get(&hash_a)
-                .expect("Root node does not exist").clone(), Vec::new()))
+                .expect("Root node does not exist").borrow().clone(), Vec::new()))
         }
-        let root_a = self.nodes.get(&hash_a)
+        let root_a_handle = self.nodes.get(&hash_a)
             .expect("Root node does not exist");
-        let root_b = self.nodes.get(&hash_b)
+        let root_b_handle = self.nodes.get(&hash_b)
             .expect("Root node does not exist");
-        let root_ref = self.nodes.get(&hash_ref)
+        let root_ref_handle = self.nodes.get(&hash_ref)
             .expect("Root node does not exist");
+
+        let root_a = root_a_handle.borrow();
+        let root_b = root_b_handle.borrow();
+        let root_ref = root_ref_handle.borrow();
 
         if let (Node::LeafNode(a_val), Node::LeafNode(b_val),
                     Node::LeafNode(ref_val)) = (root_a, root_b, root_ref) {
@@ -245,21 +261,21 @@ mod tests {
         let mut mpt: MerklePatriciaTree<u64, _> = MerklePatriciaTree::new(HashMap::new());
         let mut root = mpt.default_root();
         root = mpt.set(root, 0x1234_5678_9ABC_DEF0, 0);
-        assert_eq!(mpt.get(root, 0x1234_5678_9ABC_DEF0), Ok(&0));
+        assert_eq!(mpt.get(root, 0x1234_5678_9ABC_DEF0), Ok(OOB::Borrowed(&0)));
 
         root = mpt.set(root, 0, 0);
-        assert_eq!(mpt.get(root, 0), Ok(&0));
+        assert_eq!(mpt.get(root, 0), Ok(OOB::Borrowed(&0)));
         root = mpt.set(root, 1, 0);
-        assert_eq!(mpt.get(root, 1), Ok(&0));
+        assert_eq!(mpt.get(root, 1), Ok(OOB::Borrowed(&0)));
         root = mpt.set(root, 2, 100);
-        assert_eq!(mpt.get(root, 2), Ok(&100));
+        assert_eq!(mpt.get(root, 2), Ok(OOB::Borrowed(&100)));
         root = mpt.set(root, u64::max_value(), u64::max_value());
-        assert_eq!(mpt.get(root, u64::max_value()), Ok(&u64::max_value()));
+        assert_eq!(mpt.get(root, u64::max_value()), Ok(OOB::Borrowed(&u64::max_value())));
         for i in 8..64 {
             root = mpt.set(root, i, i);
         }
         for i in 8..64 {
-            assert_eq!(mpt.get(root, i), Ok(&i));
+            assert_eq!(mpt.get(root, i), Ok(OOB::Borrowed(&i)));
         }
     }
 
@@ -268,7 +284,7 @@ mod tests {
         let mut mpt: MerklePatriciaTree<u64, _> = MerklePatriciaTree::new(HashMap::new());
         let mut root = mpt.default_root();
         root = mpt.set(root, 0, 0);
-        assert_eq!(mpt.get(root, 0), Ok(&0));
+        assert_eq!(mpt.get(root, 0), Ok(OOB::Borrowed(&0)));
 
         let mut root_a;
         let mut root_b;
@@ -287,7 +303,7 @@ mod tests {
             let updates = mpt.try_merge(root_a, root_b, root).unwrap();
             let new_root = updates.get_root_hash();
             assert!(mpt.commit_set(updates).is_ok());
-            assert_eq!(mpt.get(new_root, i), Ok(&i));
+            assert_eq!(mpt.get(new_root, i), Ok(OOB::Borrowed(&i)));
         }
     }
 }

@@ -143,6 +143,7 @@ mod tests {
     use std::collections::HashMap;
 
     use dag::contract::state::{get_key, get_mapping_key};
+    use dag::storage::map::OOB;
 
     #[test]
     fn test_exec_contract() {
@@ -175,9 +176,9 @@ mod tests {
 
         // Assert the values were set correctly
         for (i, val) in values.iter().enumerate() {
-            assert_eq!(Ok(val), storage.get(root, get_key(i as u32, 0)));
+            assert_eq!(Ok(OOB::Borrowed(val)), storage.get(root, get_key(i as u32, 0)));
         }
-        assert_eq!(Ok(&mapping_val), storage.get(root, mapping_key));
+        assert_eq!(Ok(OOB::Borrowed(&mapping_val)), storage.get(root, mapping_key));
 
         // Now, assert the correct values also come out of WASM
         assert_eq!(Some(ContractValue::U32(1)),

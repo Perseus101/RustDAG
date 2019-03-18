@@ -83,40 +83,40 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
     }
 
     fn get_u32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::U32(val)) => Ok(Some(RuntimeValue::I32(*val as i32))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+            Ok(ContractValue::U32(val)) => Ok(Some(RuntimeValue::I32(val as i32))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_u64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(*val as i64))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(val as i64))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_f32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::F32(val)) => Ok(Some(RuntimeValue::F32(F32::from(*val)))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+            Ok(ContractValue::F32(val)) => Ok(Some(RuntimeValue::F32(F32::from(val)))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_f64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::F64(val)) => Ok(Some(RuntimeValue::F64(F64::from(*val)))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+            Ok(ContractValue::F64(val)) => Ok(Some(RuntimeValue::F64(F64::from(val)))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_mapping(&self, index: u32, key: u64) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_mapping_key(index, key)) {
-            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(*val as i64))),
+        match self.state.get(self.root, self.get_mapping_key(index, key)).map(|v| v.borrow().clone()) {
+            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(val as i64))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
@@ -235,6 +235,7 @@ mod tests {
     use wasmi::{Module, ModuleInstance, ModuleRef, ImportsBuilder};
 
     use dag::storage::mpt::temp_map::MPTTempMap;
+    use dag::storage::map::OOB;
 
     fn load_module_from_file(filename: String) -> Module {
         let mut file = File::open(filename).expect("Could not open test file");
@@ -302,8 +303,8 @@ mod tests {
         root = updates.get_root_hash();
         assert!(mpt.commit_set(updates).is_ok());
 
-        assert_eq!(mpt.get(root, get_key(0, 0)), Ok(&ContractValue::U32(15)));
-        assert_eq!(mpt.get(root, get_key(1, 0)), Ok(&ContractValue::U32(100)));
+        assert_eq!(mpt.get(root, get_key(0, 0)), Ok(OOB::Borrowed(&ContractValue::U32(15))));
+        assert_eq!(mpt.get(root, get_key(1, 0)), Ok(OOB::Borrowed(&ContractValue::U32(100))));
         // Assert the values are changed
         {
             let mut temp_state = ContractState::new(&module,
@@ -440,8 +441,8 @@ mod tests {
 
         root = updates.get_root_hash();
         assert!(mpt.commit_set(updates).is_ok());
-        assert_eq!(mpt.get(root, get_mapping_key(0, 0, contract_id)), Ok(&ContractValue::U64(0)));
-        assert_eq!(mpt.get(root, get_mapping_key(0, 1, contract_id)), Ok(&ContractValue::U64(10)));
+        assert_eq!(mpt.get(root, get_mapping_key(0, 0, contract_id)), Ok(OOB::Borrowed(&ContractValue::U64(0))));
+        assert_eq!(mpt.get(root, get_mapping_key(0, 1, contract_id)), Ok(OOB::Borrowed(&ContractValue::U64(10))));
 
         {
             let mut temp_state = ContractState::new(&module,

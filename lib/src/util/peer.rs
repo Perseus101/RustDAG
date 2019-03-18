@@ -5,7 +5,7 @@ use self::restson::{RestClient, RestPath, Error};
 
 use dag::{
     blockdag::BlockDAG,
-    storage::map::{Map, MapError, MapResult},
+    storage::map::{Map, OOB, MapError, MapResult},
     storage::mpt::{node::Node},
     transaction::Transaction,
     contract::{Contract, ContractValue},
@@ -86,9 +86,9 @@ impl Peer {
 }
 
 impl Map<u64, Transaction> for TransactionPeer {
-    fn get<>(& self, k: &u64) -> MapResult<&Transaction> {
+    fn get<>(& self, k: &u64) -> MapResult<OOB<Transaction>> {
         match self.0.get_transaction(*k) {
-            // TODO Some(transaction) => Ok(&transaction),
+            // TODO Some(transaction) => Ok(OOB::Owned(transaction)),
             Some(_) => Err(MapError::NotFound),
             None => Err(MapError::LookupError)
         }
@@ -101,9 +101,9 @@ impl Map<u64, Transaction> for TransactionPeer {
 }
 
 impl Map<u64, Contract> for ContractPeer {
-    fn get(&self, k: &u64) -> MapResult<&Contract> {
+    fn get(&self, k: &u64) -> MapResult<OOB<Contract>> {
         match self.0.get_contract(*k) {
-            // TODO Some(contract) => Ok(&contract),
+            // TODO Some(contract) => Ok(OOB::Owned(contract)),
             Some(_) => Err(MapError::NotFound),
             None => Err(MapError::LookupError)
         }
@@ -115,10 +115,10 @@ impl Map<u64, Contract> for ContractPeer {
 }
 
 impl Map<u64, Node<ContractValue>> for MPTNodePeer {
-    fn get(&self, k: &u64) -> MapResult<&Node<ContractValue>> {
+    fn get(&self, _k: &u64) -> MapResult<OOB<Node<ContractValue>>> {
         Err(MapError::LookupError)
     }
-    fn set(&mut self, k: u64, v: Node<ContractValue>) -> MapResult<()> {
+    fn set(&mut self, _k: u64, _v: Node<ContractValue>) -> MapResult<()> {
         Err(MapError::LookupError)
     }
 }
