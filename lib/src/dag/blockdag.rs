@@ -13,7 +13,7 @@ use dag::milestone::pending::{
     MilestoneSignature,
     MilestoneTracker
 };
-use dag::storage::mpt::MerklePatriciaTree;
+use dag::storage::mpt::{MerklePatriciaTree, node::Node};
 use dag::storage::map::{Map, OOB};
 
 use super::incomplete_chain::IncompleteChain;
@@ -348,6 +348,14 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
 
     pub fn get_contract<'a>(&'a self, id: u64) -> Option<OOB<Contract>> {
         self.contracts.get(&id).ok()
+    }
+
+    pub fn get_mpt_node<'a>(&'a self, id: u64) -> Option<OOB<Node<ContractValue>>> {
+        self.storage.nodes.get(&id).ok()
+    }
+
+    pub fn get_mpt_default_root(&self) -> u64 {
+        self.storage.default_root()
     }
 }
 

@@ -17,7 +17,7 @@ use security::keys::PrivateKey;
 
 fn main() {
     let server = Peer::new(String::from("http://localhost:4200"));
-
+    let blockdag = server.clone().into_remote_blockdag();
     // Load contract
     let mut file = File::open("test.wasm").expect("Could not open test file");
     let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);
@@ -26,23 +26,28 @@ fn main() {
 
     let mut contract_id = 0;
     let mut trunk_nonce = 0;
+    let mut root = blockdag.get_mpt_default_root();
     let tip_hashes = server.get_tips();
-    if let Some(trunk) = server.get_transaction(tip_hashes.trunk_hash) {
-        if let Some(branch) = server.get_transaction(tip_hashes.branch_hash) {
+    if let Ok(trunk) = server.get_transaction(tip_hashes.trunk_hash) {
+        if let Ok(branch) = server.get_transaction(tip_hashes.branch_hash) {
             trunk_nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
 
             let mut pk = PrivateKey::new(&SHA512_256);
 
             let mut transaction = Transaction::create(
                 tip_hashes.branch_hash, tip_hashes.trunk_hash, vec![], 0,
-                trunk_nonce, 0, TransactionData::GenContract(contract_src.clone())
+                trunk_nonce, root,
+                TransactionData::GenContract(contract_src.clone())
             );
 
             transaction.sign(&mut pk);
 
             contract_id = transaction.get_hash();
 
-            if let TransactionStatus::Rejected(_) = server.post_transaction(&transaction) {
+            root = blockdag.try_add_transaction(&transaction).unwrap()
+                .get_storage_root().unwrap();
+
+            if let Ok(TransactionStatus::Rejected(_)) = server.post_transaction(&transaction) {
                 panic!("Contract rejected");
             }
         }
@@ -64,21 +69,23 @@ fn main() {
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(10), ContractValue::U64(1000)]),
             ].iter() {
         let tip_hashes = server.get_tips();
-        if let Some(branch) = server.get_transaction(tip_hashes.branch_hash) {
+        if let Ok(branch) = server.get_transaction(tip_hashes.branch_hash) {
             trunk_nonce = proof_of_work(trunk_nonce, branch.get_nonce());
             let mut pk = PrivateKey::new(&SHA512_256);
             let mut transaction = Transaction::create(
                 tip_hashes.branch_hash, trunk_hash, vec![],
-                contract_id, trunk_nonce, 0, data.clone()
+                contract_id, trunk_nonce, root, data.clone()
             );
             transaction.sign(&mut pk);
             trunk_hash = transaction.get_hash();
+            root = blockdag.try_add_transaction(&transaction).unwrap()
+                .get_storage_root().unwrap();
             print!("Transaction {}: ", transaction.get_hash());
 
             match server.post_transaction(&transaction) {
-                TransactionStatus::Milestone => println!("Milestone"),
-                TransactionStatus::Rejected(message) => println!("Rejected: {:?}", message),
-                _ => {}
+                Ok(TransactionStatus::Milestone) => println!("Milestone"),
+                Ok(TransactionStatus::Rejected(message)) => println!("Rejected: {:?}", message),
+                data => { println!("{:?}", data) }
             }
         }
     }

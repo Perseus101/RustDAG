@@ -49,6 +49,10 @@ impl<M: 'static + ContractStateStorage + Send + Sync,
         self.dag.read().unwrap().get_contract(hash).and_then(|c| Some(c.clone()))
     }
 
+    pub fn get_mpt_node(&self, hash: u64) -> Option<Node<ContractValue>> {
+        self.dag.read().unwrap().get_mpt_node(hash).and_then(|n| Some(n.clone()))
+    }
+
     pub fn get_transaction_status(&self, hash: u64) -> TransactionStatus {
         self.dag.read().unwrap().get_confirmation_status(hash)
     }

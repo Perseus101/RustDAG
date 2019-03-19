@@ -32,8 +32,14 @@ impl RestPath<TransactionRequest> for Transaction {
 }
 
 impl RestPath<u64> for Contract {
-    fn get_path(hash: u64)  -> Result<String, Error> {
+    fn get_path(hash: u64) -> Result<String, Error> {
         Ok(format!("contract/{}", hash))
+    }
+}
+
+impl RestPath<u64> for Node<ContractValue> {
+    fn get_path(hash: u64) -> Result<String, Error> {
+        Ok(format!("node/{}", hash))
     }
 }
 
@@ -64,14 +70,14 @@ impl Peer {
         BlockDAG::new(t, c, m)
     }
 
-    pub fn get_transaction(&self, hash: u64) -> Option<Transaction> {
-        let mut client = RestClient::new(&self.client_url).unwrap();
-        client.get(TransactionRequest::GET(hash)).ok()
+    pub fn get_transaction(&self, hash: u64) -> Result<Transaction, Error> {
+        let mut client = RestClient::new(&self.client_url)?;
+        client.get(TransactionRequest::GET(hash))
     }
 
-    pub fn post_transaction(&self, transaction: &Transaction) -> TransactionStatus {
-        let mut client = RestClient::new(&self.client_url).unwrap();
-        client.post_capture(TransactionRequest::POST(), transaction).unwrap()
+    pub fn post_transaction(&self, transaction: &Transaction) -> Result<TransactionStatus, Error> {
+        let mut client = RestClient::new(&self.client_url)?;
+        client.post_capture(TransactionRequest::POST(), transaction)
     }
 
     pub fn get_tips(&self) -> TransactionHashes {
@@ -79,23 +85,29 @@ impl Peer {
         client.get(()).unwrap()
     }
 
-    pub fn get_contract(&self, hash: u64) -> Option<Contract> {
-        let mut client = RestClient::new(&self.client_url).unwrap();
-        client.get(hash).ok()
+    pub fn get_contract(&self, hash: u64) -> Result<Contract, Error> {
+        let mut client = RestClient::new(&self.client_url)?;
+        client.get(hash)
+    }
+
+    pub fn get_mpt_node(&self, hash: u64) -> Result<Node<ContractValue>, Error> {
+        let mut client = RestClient::new(&self.client_url)?;
+        client.get(hash)
     }
 }
 
 impl Map<u64, Transaction> for TransactionPeer {
-    fn get<>(& self, k: &u64) -> MapResult<OOB<Transaction>> {
+    fn get(&self, k: &u64) -> MapResult<OOB<Transaction>> {
         match self.0.get_transaction(*k) {
-            // TODO Some(transaction) => Ok(OOB::Owned(transaction)),
-            Some(_) => Err(MapError::NotFound),
-            None => Err(MapError::LookupError)
+            Ok(transaction) => Ok(OOB::Owned(transaction)),
+            Err(_) => Err(MapError::LookupError)
         }
     }
 
     fn set(&mut self, _: u64, v: Transaction) -> MapResult<()> {
-        self.0.post_transaction(&v);
+        let _status =
+            self.0.post_transaction(&v).map_err(|_| { MapError::LookupError })?;
+        // TODO check status
         Ok(())
     }
 }
@@ -103,9 +115,8 @@ impl Map<u64, Transaction> for TransactionPeer {
 impl Map<u64, Contract> for ContractPeer {
     fn get(&self, k: &u64) -> MapResult<OOB<Contract>> {
         match self.0.get_contract(*k) {
-            // TODO Some(contract) => Ok(OOB::Owned(contract)),
-            Some(_) => Err(MapError::NotFound),
-            None => Err(MapError::LookupError)
+            Ok(contract) => Ok(OOB::Owned(contract)),
+            Err(_) => Err(MapError::LookupError)
         }
     }
 
@@ -115,10 +126,21 @@ impl Map<u64, Contract> for ContractPeer {
 }
 
 impl Map<u64, Node<ContractValue>> for MPTNodePeer {
-    fn get(&self, _k: &u64) -> MapResult<OOB<Node<ContractValue>>> {
-        Err(MapError::LookupError)
+    fn get(&self, k: &u64) -> MapResult<OOB<Node<ContractValue>>> {
+        // Get from the local nodes
+        // If no nodes exist, then check the remote nodes
+        self.nodes.get(k).map_or_else(|| {
+                self.peer.get_mpt_node(*k)
+                    .map_err(|_| { MapError::LookupError })
+                    .map(|node| { OOB::Owned(node) })
+            },
+            |node| {
+                Ok(OOB::Borrowed(node))
+            }
+        )
     }
-    fn set(&mut self, _k: u64, _v: Node<ContractValue>) -> MapResult<()> {
-        Err(MapError::LookupError)
+    fn set(&mut self, k: u64, v: Node<ContractValue>) -> MapResult<()> {
+        self.nodes.insert(k, v);
+        Ok(())
     }
 }

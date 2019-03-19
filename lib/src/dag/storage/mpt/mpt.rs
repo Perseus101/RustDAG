@@ -11,7 +11,7 @@ pub trait MPTStorageMap<T: MPTData> = Map<u64, Node<T>>;
 pub trait MPTData = Hash + PartialEq + Clone + Debug;
 
 pub struct MerklePatriciaTree<T: MPTData, M: MPTStorageMap<T>> {
-    pub(super) nodes: M,
+    pub(crate) nodes: M,
     phantom: PhantomData<T>,
 }
 
