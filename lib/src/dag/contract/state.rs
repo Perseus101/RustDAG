@@ -83,7 +83,7 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
     }
 
     fn get_u32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
             Ok(ContractValue::U32(val)) => Ok(Some(RuntimeValue::I32(val as i32))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
@@ -91,7 +91,7 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
     }
 
     fn get_u64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
             Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(val as i64))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
@@ -99,7 +99,7 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
     }
 
     fn get_f32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
             Ok(ContractValue::F32(val)) => Ok(Some(RuntimeValue::F32(F32::from(val)))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
@@ -107,7 +107,7 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
     }
 
     fn get_f64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)).map(|v| v.borrow().clone()) {
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
             Ok(ContractValue::F64(val)) => Ok(Some(RuntimeValue::F64(F64::from(val)))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
@@ -115,7 +115,7 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
     }
 
     fn get_mapping(&self, index: u32, key: u64) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_mapping_key(index, key)).map(|v| v.borrow().clone()) {
+        match self.state.get(self.root, self.get_mapping_key(index, key)).map(|v| v.clone()) {
             Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(val as i64))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))

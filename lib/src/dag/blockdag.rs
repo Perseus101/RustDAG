@@ -93,8 +93,8 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         let trunk_transaction;
         if let Some(trunk_handle) = self.get_transaction(transaction.get_trunk_hash()) {
             if let Some(branch_handle) = self.get_transaction(transaction.get_branch_hash()) {
-                let trunk = trunk_handle.borrow();
-                let branch = branch_handle.borrow();
+                let trunk = *trunk_handle;
+                let branch = *branch_handle;
                 if !valid_proof(trunk.get_nonce(), branch.get_nonce(), transaction.get_nonce()) {
                     return Err(TransactionError::Rejected("Invalid nonce".into()));
                 }
@@ -114,7 +114,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         referenced.push(branch_transaction.get_hash());
         for hash in ref_hashes {
             if let Some(t) = self.get_transaction(hash) {
-                referenced.push(t.borrow().get_hash());
+                referenced.push(t.get_hash());
             }
             else { return Err(TransactionError::Rejected("Referenced transaction not found".into())); }
         }
@@ -145,7 +145,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
                     return Err(TransactionError::Rejected("Invalid contract id".into()));
                 }
                 if let Ok(contract) = self.contracts.get(&transaction.get_contract()) {
-                    match contract.borrow().exec(func_name, args, &self.storage, transaction.get_root()) {
+                    match contract.exec(func_name, args, &self.storage, transaction.get_root()) {
                         Ok((_val, node_updates)) => {
                             updates.add_node_updates(node_updates);
                         },
@@ -271,7 +271,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         }
         for transaction_hash in transaction.get_all_refs() {
             if let Some(transaction_handle) = self.get_transaction(transaction_hash) {
-                let transaction = transaction_handle.borrow();
+                let transaction = *transaction_handle;
                 if transaction_hash == hash {
                     // This is the transaction we are looking for, return
                     return true;
@@ -340,7 +340,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         }
         else {
             let trunk_tip = self.tips[0];
-            (trunk_tip, self.get_transaction(trunk_tip).unwrap().borrow().get_branch_hash())
+            (trunk_tip, self.get_transaction(trunk_tip).unwrap().get_branch_hash())
         };
 
         TransactionHashes::new(trunk_tip, branch_tip)
@@ -512,7 +512,7 @@ mod tests {
         file.read_to_end(&mut buf).expect("Could not read test file");
 
         let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
-        let mpt_root = dag.get_transaction(TRUNK_HASH).unwrap().borrow().get_root();
+        let mpt_root = dag.get_transaction(TRUNK_HASH).unwrap().get_root();
         let contract_id;
         let trunk_hash;
         let branch_hash;
@@ -533,8 +533,8 @@ mod tests {
         }
         {
             let new_value = 2;
-            let branch_nonce = dag.get_transaction(branch_hash).unwrap().borrow().get_nonce();
-            let trunk_nonce = dag.get_transaction(trunk_hash).unwrap().borrow().get_nonce();
+            let branch_nonce = dag.get_transaction(branch_hash).unwrap().get_nonce();
+            let trunk_nonce = dag.get_transaction(trunk_hash).unwrap().get_nonce();
             let nonce = proof_of_work(trunk_nonce, branch_nonce);
             let mut key = PrivateKey::new(&SHA512_256);
             let data = TransactionData::ExecContract("set_u32".into(),

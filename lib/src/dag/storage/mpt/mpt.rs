@@ -83,7 +83,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 if i == 16 {
                     break;
                 }
-                let loop_to_new_node = match loop_node.borrow() {
+                let loop_to_new_node = match *loop_node {
                     Node::BranchNode(pointers) => {
                         if let Some(hash) = pointers.get_next_hash(key) {
                             Some(self.nodes.get(&hash).expect("Node does not exist"))
@@ -97,7 +97,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 if let Some(n) = loop_to_new_node {
                     loop_node = n;
                 }
-                new_nodes.push(loop_node.borrow().clone());
+                new_nodes.push(loop_node.clone());
                 key <<= 4;
                 i += 1;
             }
@@ -125,7 +125,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 key >>= 4;
             }
             new_nodes.push(leaf_node);
-            let mut new_root = self.nodes.get(&root).expect("Root node does not exist").borrow().clone();
+            let mut new_root = self.nodes.get(&root).expect("Root node does not exist").clone();
             if let Node::BranchNode(ref mut pointers) = new_root {
                 pointers.set_from(key, hash);
             }
@@ -154,7 +154,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
             -> Option<NodeUpdates<T>> {
         if hash_a == hash_b {
             return Some(NodeUpdates::new(self.nodes.get(&hash_a)
-                .expect("Root node does not exist").borrow().clone(), Vec::new()))
+                .expect("Root node does not exist").clone(), Vec::new()))
         }
         let root_a_handle = self.nodes.get(&hash_a)
             .expect("Root node does not exist");
@@ -163,9 +163,9 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         let root_ref_handle = self.nodes.get(&hash_ref)
             .expect("Root node does not exist");
 
-        let root_a = root_a_handle.borrow();
-        let root_b = root_b_handle.borrow();
-        let root_ref = root_ref_handle.borrow();
+        let root_a = *root_a_handle;
+        let root_b = *root_b_handle;
+        let root_ref = *root_ref_handle;
 
         if let (Node::LeafNode(a_val), Node::LeafNode(b_val),
                     Node::LeafNode(ref_val)) = (root_a, root_b, root_ref) {
