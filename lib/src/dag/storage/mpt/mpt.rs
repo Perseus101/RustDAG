@@ -83,7 +83,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 if i == 16 {
                     break;
                 }
-                let loop_to_new_node = match *loop_node {
+                let loop_to_new_node = match loop_node.borrow() {
                     Node::BranchNode(pointers) => {
                         if let Some(hash) = pointers.get_next_hash(key) {
                             Some(self.nodes.get(&hash).expect("Node does not exist"))
@@ -163,9 +163,9 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         let root_ref_handle = self.nodes.get(&hash_ref)
             .expect("Root node does not exist");
 
-        let root_a = *root_a_handle;
-        let root_b = *root_b_handle;
-        let root_ref = *root_ref_handle;
+        let root_a = root_a_handle.borrow();
+        let root_b = root_b_handle.borrow();
+        let root_ref = root_ref_handle.borrow();
 
         if let (Node::LeafNode(a_val), Node::LeafNode(b_val),
                     Node::LeafNode(ref_val)) = (root_a, root_b, root_ref) {

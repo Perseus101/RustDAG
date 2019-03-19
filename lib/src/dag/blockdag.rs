@@ -93,8 +93,8 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         let trunk_transaction;
         if let Some(trunk_handle) = self.get_transaction(transaction.get_trunk_hash()) {
             if let Some(branch_handle) = self.get_transaction(transaction.get_branch_hash()) {
-                let trunk = *trunk_handle;
-                let branch = *branch_handle;
+                let trunk = trunk_handle.borrow();
+                let branch = branch_handle.borrow();
                 if !valid_proof(trunk.get_nonce(), branch.get_nonce(), transaction.get_nonce()) {
                     return Err(TransactionError::Rejected("Invalid nonce".into()));
                 }
@@ -271,7 +271,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         }
         for transaction_hash in transaction.get_all_refs() {
             if let Some(transaction_handle) = self.get_transaction(transaction_hash) {
-                let transaction = *transaction_handle;
+                let transaction = transaction_handle.borrow();
                 if transaction_hash == hash {
                     // This is the transaction we are looking for, return
                     return true;
