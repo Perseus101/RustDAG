@@ -2,14 +2,19 @@ use std::collections::HashMap;
 
 use rand::{Rng,thread_rng};
 
-use dag::transaction::{Transaction, data::TransactionData};
+use dag::transaction::{
+    Transaction, data::TransactionData,
+    error::TransactionError,
+    updates::TransactionUpdates
+};
 use dag::contract::{Contract, ContractValue, state::ContractStateStorage};
 use dag::milestone::Milestone;
 use dag::milestone::pending::{
     MilestoneSignature,
     MilestoneTracker
 };
-use dag::storage::mpt::MerklePatriciaTree;
+use dag::storage::mpt::{MerklePatriciaTree, node::Node};
+use dag::storage::map::{Map, OOB};
 
 use super::incomplete_chain::IncompleteChain;
 
@@ -22,18 +27,30 @@ const GENESIS_HASH: u64 = 0;
 const MILESTONE_NONCE_MIN: u32 = 100_000;
 const MILESTONE_NONCE_MAX: u32 = 200_000;
 
-pub struct BlockDAG<M: ContractStateStorage> {
-    transactions: HashMap<u64, Transaction>,
+pub trait TransactionStorage = Map<u64, Transaction>;
+pub trait ContractStorage = Map<u64, Contract>;
+
+pub struct BlockDAG<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> {
+    transactions: T,
     pending_transactions: HashMap<u64, Transaction>,
-    contracts: HashMap<u64, Contract>,
+    contracts: C,
     storage: MerklePatriciaTree<ContractValue, M>,
     milestones: MilestoneTracker,
     tips: Vec<u64>,
 }
 
-impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
-	fn default() -> Self {
-        let storage = MerklePatriciaTree::default();
+impl<M: ContractStateStorage + Default, T: TransactionStorage + Default,
+        C: ContractStorage + Default> Default for BlockDAG<M, T, C> {
+    fn default() -> Self {
+        Self::new(T::default(), C::default(), M::default())
+    }
+}
+
+impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDAG<M, T, C> {
+
+    #[allow(unused_must_use)]
+	pub fn new(transaction_storage: T, contract_storage: C, state_storage: M) -> Self {
+        let storage = MerklePatriciaTree::new(state_storage);
         let default_root = storage.default_root();
 
         let genesis_transaction = Transaction::new(GENESIS_HASH, GENESIS_HASH,
@@ -41,9 +58,9 @@ impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
         let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
 
 		let mut dag = BlockDAG {
-			transactions: HashMap::new(),
-            pending_transactions: HashMap::new(),
-            contracts: HashMap::new(),
+			transactions: transaction_storage,
+            pending_transactions: HashMap::default(),
+            contracts: contract_storage,
             storage,
             milestones: MilestoneTracker::new(genesis_milestone),
             tips: Vec::new(),
@@ -54,43 +71,42 @@ impl<M: ContractStateStorage + Default> Default for BlockDAG<M> {
             genesis_transaction_hash, vec![], 0, 0, 0, default_root, TransactionData::Genesis);
         let genesis_branch_hash = genesis_branch.get_hash();
 
-        dag.transactions.insert(genesis_transaction_hash, genesis_transaction);
-        dag.pending_transactions.insert(genesis_branch_hash, genesis_branch);
+        dag.transactions.set(genesis_transaction_hash, genesis_transaction);
+        dag.pending_transactions.set(genesis_branch_hash, genesis_branch);
         dag.tips.push(genesis_transaction_hash);
         dag.tips.push(genesis_branch_hash);
 
         dag
 	}
-}
 
-impl<M: ContractStateStorage> BlockDAG<M> {
-
-    /// Add a transaction to the dag
+    /// Try to add a transaction to the dag
     ///
-    /// Calling this function inserts the new transaction into the list
-    /// of active tips, and moves all transactions it references from
-    /// list of active tips to the list of transactions.
+    /// Calling this function checks the validity of the transaction against
+    /// the local transactions and contracts
     ///
     /// If the transaction is not valid, either because the proof of work
     /// is invalid, or because one of the referenced transactions does not
     /// exist, the function will return TransactionStatus::Rejected
-    pub fn add_transaction(&mut self, transaction: &Transaction) -> TransactionStatus {
+    pub fn try_add_transaction(&self, transaction: &Transaction)
+            -> Result<TransactionUpdates, TransactionError> {
         let branch_transaction;
         let trunk_transaction;
-        if let Some(trunk) = self.get_transaction(transaction.get_trunk_hash()) {
-            if let Some(branch) = self.get_transaction(transaction.get_branch_hash()) {
+        if let Some(trunk_handle) = self.get_transaction(transaction.get_trunk_hash()) {
+            if let Some(branch_handle) = self.get_transaction(transaction.get_branch_hash()) {
+                let trunk = trunk_handle.borrow();
+                let branch = branch_handle.borrow();
                 if !valid_proof(trunk.get_nonce(), branch.get_nonce(), transaction.get_nonce()) {
-                    return TransactionStatus::Rejected("Invalid nonce".into());
+                    return Err(TransactionError::Rejected("Invalid nonce".into()));
                 }
                 trunk_transaction = trunk.clone();
                 branch_transaction = branch.clone();
             }
-            else { return TransactionStatus::Rejected("Branch transaction not found".into()); }
+            else { return Err(TransactionError::Rejected("Branch transaction not found".into())); }
         }
-        else { return TransactionStatus::Rejected("Trunk transaction not found".into()); }
+        else { return Err(TransactionError::Rejected("Trunk transaction not found".into())); }
 
         // Verify the transaction's signature
-        if !transaction.verify() { return TransactionStatus::Rejected("Invalid signature".into()); }
+        if !transaction.verify() { return Err(TransactionError::Rejected("Invalid signature".into())); }
 
         let ref_hashes = transaction.get_ref_hashes();
         let mut referenced = Vec::with_capacity(ref_hashes.len() + 2);
@@ -100,51 +116,87 @@ impl<M: ContractStateStorage> BlockDAG<M> {
             if let Some(t) = self.get_transaction(hash) {
                 referenced.push(t.get_hash());
             }
-            else { return TransactionStatus::Rejected("Referenced transaction not found".into()); }
+            else { return Err(TransactionError::Rejected("Referenced transaction not found".into())); }
         }
 
         let hash = transaction.get_hash();
 
+        let mut updates = TransactionUpdates::new(referenced);
+
         // Process the transaction's data
         match transaction.get_data() {
-            TransactionData::Genesis => return TransactionStatus::Rejected("Genesis transaction".into()),
+            TransactionData::Genesis => return Err(TransactionError::Rejected("Genesis transaction".into())),
             TransactionData::GenContract(src) => {
                 if transaction.get_contract() != 0 {
-                    return TransactionStatus::Rejected("Invalid gen contract id".into());
+                    return Err(TransactionError::Rejected("Invalid gen contract id".into()));
                 }
                 // Generate a new contract
-                match Contract::new(src.clone(), hash) {
-                    Ok(contract) => { self.contracts.insert(hash, contract); },
-                    Err(_) => return TransactionStatus::Rejected("Invalid contract".into()),
+                match Contract::new(src.clone(), hash, &self.storage, transaction.get_root()) {
+                    Ok((contract, node_updates)) => {
+                        updates.add_contract(contract);
+                        updates.add_node_updates(node_updates);
+                    },
+                    Err(_) => return Err(TransactionError::Rejected("Invalid contract".into())),
                 }
             },
             TransactionData::ExecContract(func_name, args) => {
                 if transaction.get_contract() != trunk_transaction.get_contract()
                         && trunk_transaction.get_contract() != 0 {
-                    return TransactionStatus::Rejected("Invalid contract id".into());
+                    return Err(TransactionError::Rejected("Invalid contract id".into()));
                 }
-                if let Some(contract) = self.contracts.get(&transaction.get_contract()) {
-                    if contract.exec(func_name, args, &self.storage, transaction.get_root()).is_err() {
-                        return TransactionStatus::Rejected("Function failed to execute".into())
+                if let Ok(contract) = self.contracts.get(&transaction.get_contract()) {
+                    match contract.exec(func_name, args, &self.storage, transaction.get_root()) {
+                        Ok((_val, node_updates)) => {
+                            updates.add_node_updates(node_updates);
+                        },
+                        Err(err) => {
+                            return Err(TransactionError::Rejected(format!("Function failed to execute: {:?}", err)));
+                        }
                     }
+                }
+                else {
+                    return Err(TransactionError::Rejected("Contract not found".into()));
                 }
             },
             TransactionData::Empty => {}
         };
 
-        for t in referenced {
+        Ok(updates)
+    }
+
+    /// inserts the new transaction into the list
+    /// of active tips, and moves all transactions it references from
+    /// list of active tips to the list of transactions.
+    pub fn commit_transaction(&mut self, transaction: Transaction,
+            updates: TransactionUpdates)
+            -> Result<TransactionStatus, TransactionError> {
+        let hash = transaction.get_hash();
+
+        if let Some(updates) = updates.node_updates {
+            self.storage.commit_set(updates)?;
+        }
+        if let Some(contract) = updates.contract {
+            self.contracts.set(hash, contract)?;
+        }
+        for t in updates.referenced {
             self.tips.remove_item(&t);
         }
-        self.pending_transactions.insert(hash, transaction.clone());
-        self.tips.push(hash);
+
+
+        let mut res = TransactionStatus::Pending;
 
         if transaction.get_nonce() > MILESTONE_NONCE_MIN &&
             transaction.get_nonce() < MILESTONE_NONCE_MAX &&
             self.milestones.new_milestone(transaction.clone()) {
-                return TransactionStatus::Milestone;
+                res = TransactionStatus::Milestone;
         }
-        TransactionStatus::Pending
+
+        self.pending_transactions.set(hash, transaction)?;
+        self.tips.push(hash);
+
+        return Ok(res);
     }
+
 
     /// Add a confirmed milestone to the list of milestones
     ///
@@ -218,7 +270,8 @@ impl<M: ContractStateStorage> BlockDAG<M> {
             return false;
         }
         for transaction_hash in transaction.get_all_refs() {
-            if let Some(transaction) = self.get_transaction(transaction_hash) {
+            if let Some(transaction_handle) = self.get_transaction(transaction_hash) {
+                let transaction = transaction_handle.borrow();
                 if transaction_hash == hash {
                     // This is the transaction we are looking for, return
                     return true;
@@ -238,20 +291,21 @@ impl<M: ContractStateStorage> BlockDAG<M> {
 
     /// Move all transactions referenced by transaction from
     /// pending_transactions to transactions
+    #[allow(unused_must_use)]
     fn confirm_transactions(&mut self, transaction: &Transaction) {
         for transaction_hash in transaction.get_all_refs() {
             if let Some(pending_transaction) = self.pending_transactions.remove(&transaction_hash) {
                 self.confirm_transactions(&pending_transaction);
-                self.transactions.insert(transaction_hash, pending_transaction);
+                self.transactions.set(transaction_hash, pending_transaction);
             }
         }
     }
 
     /// Returns the transaction specified by hash
-    pub fn get_transaction(&self, hash: u64) -> Option<&Transaction> {
+    pub fn get_transaction<'a>(&'a self, hash: u64) -> Option<OOB<'a, Transaction>> {
         self.pending_transactions.get(&hash).map_or(
-            self.transactions.get(&hash), |pending_transaction| {
-                Some(pending_transaction)
+            self.transactions.get(&hash).ok(), |pending_transaction| {
+                Some(OOB::Borrowed(pending_transaction))
             }
         )
     }
@@ -261,7 +315,7 @@ impl<M: ContractStateStorage> BlockDAG<M> {
         if self.pending_transactions.get(&hash).is_some() {
             return TransactionStatus::Pending;
         }
-        if self.transactions.get(&hash).is_some() {
+        if self.transactions.get(&hash).is_ok() {
             return TransactionStatus::Accepted;
         }
         TransactionStatus::Rejected("Not accepted".into())
@@ -292,10 +346,20 @@ impl<M: ContractStateStorage> BlockDAG<M> {
         TransactionHashes::new(trunk_tip, branch_tip)
     }
 
-    pub fn get_contract(&self, id: u64) -> Option<&Contract> {
-        self.contracts.get(&id)
+    pub fn get_contract<'a>(&'a self, id: u64) -> Option<OOB<Contract>> {
+        self.contracts.get(&id).ok()
     }
 
+    pub fn get_mpt_node<'a>(&'a self, id: u64) -> Option<OOB<Node<ContractValue>>> {
+        self.storage.nodes.get(&id).ok()
+    }
+
+    pub fn get_mpt_default_root(&self) -> u64 {
+        self.storage.default_root()
+    }
+}
+
+impl<M: ContractStateStorage, T: TransactionStorage> BlockDAG<M, T, HashMap<u64, Contract>> {
     // Get the hash id's of all the contracts stored on the dag
     pub fn get_contracts(&self) -> Vec<u64> {
         self.contracts.keys().cloned().collect()
@@ -303,7 +367,7 @@ impl<M: ContractStateStorage> BlockDAG<M> {
 }
 
 #[cfg(test)]
-impl<M: ContractStateStorage> BlockDAG<M> {
+impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDAG<M, T, C> {
     fn force_add_transaction(&mut self, transaction: Transaction) {
         let hash = transaction.get_hash();
         self.pending_transactions.insert(hash, transaction);
@@ -332,8 +396,9 @@ mod tests {
 
     const BASE_NONCE: u32 = 132;
 
-    fn insert_transaction<M: ContractStateStorage> (dag: &mut BlockDAG<M>, branch: u64, trunk: u64,
-            contract: u64, data: TransactionData) -> Transaction {
+    fn insert_transaction<M: ContractStateStorage, T: TransactionStorage,
+            C: ContractStorage> (dag: &mut BlockDAG<M, T, C>, branch: u64,
+            trunk: u64, contract: u64, data: TransactionData) -> Transaction {
         let transaction = Transaction::new(branch, trunk, Vec::new(),
             contract, 0, 0, 0, data);
         dag.force_add_transaction(transaction.clone());
@@ -342,7 +407,7 @@ mod tests {
 
     #[test]
     fn test_genesis_transactions() {
-        let dag = BlockDAG::<HashMap<_, _>>::default();
+        let dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let tips = dag.get_tips();
 
         if tips.trunk_hash == TRUNK_HASH {
@@ -356,14 +421,16 @@ mod tests {
 
     #[test]
     fn test_add_transaction() {
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let mut key = PrivateKey::new(&SHA512_256);
         let data = TransactionData::Empty;
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
             vec![], 0, BASE_NONCE, 0, data);
         transaction.sign(&mut key);
         assert!(transaction.verify());
-        assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
+        let updates = dag.try_add_transaction(&transaction).unwrap();
+        assert_eq!(Ok(TransactionStatus::Pending),
+            dag.commit_transaction(transaction.clone(), updates));
 
         let tips = dag.get_tips();
         assert_eq!(tips.trunk_hash, transaction.get_hash());
@@ -372,12 +439,12 @@ mod tests {
 
         let bad_transaction = Transaction::create(10, BRANCH_HASH, vec![], 0, 0, 0,
             TransactionData::Genesis);
-        assert_eq!(dag.add_transaction(&bad_transaction), TransactionStatus::Rejected("Branch transaction not found".into()));
+        assert_eq!(dag.try_add_transaction(&bad_transaction), Err(TransactionError::Rejected("Branch transaction not found".into())));
     }
 
     #[test]
     fn test_walk_search() {
-        let dag = BlockDAG::<HashMap<_, _>>::default();
+        let dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let prev_milestone = dag.milestones.get_head_milestone();
 
         let transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH, vec![],
@@ -399,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_add_milestone() {
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         let data = TransactionData::GenContract(ContractSource::new(&vec![]));
         let middle_transaction = insert_transaction(&mut dag, 0, TRUNK_HASH, 1, data.clone());
         let transaction = insert_transaction(&mut dag, 0,
@@ -416,7 +483,7 @@ mod tests {
 
     #[test]
     fn test_get_confirmation_status() {
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
         assert_eq!(dag.get_confirmation_status(TRUNK_HASH), TransactionStatus::Accepted);
         assert_eq!(dag.get_confirmation_status(BRANCH_HASH), TransactionStatus::Pending);
         assert_eq!(dag.get_confirmation_status(10), TransactionStatus::Rejected("Not accepted".into()));
@@ -426,12 +493,15 @@ mod tests {
         let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
             vec![], 0, BASE_NONCE, 0, data);
         transaction.sign(&mut key);
-        assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
+        let updates = dag.try_add_transaction(&transaction).unwrap();
+        assert_eq!(Ok(TransactionStatus::Pending),
+            dag.commit_transaction(transaction.clone(), updates));
         assert_eq!(dag.get_confirmation_status(transaction.get_hash()), TransactionStatus::Pending);
     }
 
+    use dag::contract::state::get_key;
+
     #[test]
-    #[ignore]
     fn test_gen_exec_contract_transaction() {
         // Load example contract file
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -441,7 +511,8 @@ mod tests {
         let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);
         file.read_to_end(&mut buf).expect("Could not read test file");
 
-        let mut dag = BlockDAG::<HashMap<_, _>>::default();
+        let mut dag = BlockDAG::<HashMap<_, _>, HashMap<_, _>, HashMap<_, _>>::default();
+        let mpt_root = dag.get_transaction(TRUNK_HASH).unwrap().get_root();
         let contract_id;
         let trunk_hash;
         let branch_hash;
@@ -449,27 +520,16 @@ mod tests {
             let mut key = PrivateKey::new(&SHA512_256);
             let data = TransactionData::GenContract(ContractSource::new(&buf));
             let mut transaction = Transaction::create(TRUNK_HASH, BRANCH_HASH,
-                vec![], 0, BASE_NONCE, 0, data);
+                vec![], 0, BASE_NONCE, mpt_root, data);
             transaction.sign(&mut key);
             assert!(transaction.verify());
-            assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
+            let updates = dag.try_add_transaction(&transaction).unwrap();
+            assert_eq!(dag.commit_transaction(transaction.clone(), updates).unwrap(),
+                TransactionStatus::Pending);
             contract_id = transaction.get_hash();
 
-            // Contracts can't be run until the initial transaction is confirmed
-            // Create a new fake milestone transaction to confirm transaction
-            let branch_nonce = dag.get_transaction(BRANCH_HASH).unwrap().get_nonce();
-            let nonce = proof_of_work(BASE_NONCE, branch_nonce);
-            let mut fake_milestone = Transaction::create(BRANCH_HASH,
-                transaction.get_hash(), vec![], 0, nonce, 0, TransactionData::Empty);
-            let mut key = PrivateKey::new(&SHA512_256);
-            fake_milestone.sign(&mut key);
-            assert_eq!(dag.add_transaction(&fake_milestone), TransactionStatus::Pending);
-            dag.confirm_transactions(&fake_milestone);
-            assert_eq!(TransactionStatus::Accepted,
-                dag.get_confirmation_status(transaction.get_hash()));
-
             trunk_hash = transaction.get_hash();
-            branch_hash = fake_milestone.get_hash();
+            branch_hash = transaction.get_branch_hash();
         }
         {
             let new_value = 2;
@@ -477,27 +537,22 @@ mod tests {
             let trunk_nonce = dag.get_transaction(trunk_hash).unwrap().get_nonce();
             let nonce = proof_of_work(trunk_nonce, branch_nonce);
             let mut key = PrivateKey::new(&SHA512_256);
-            let data = TransactionData::ExecContract("set_u32".to_owned(),
+            let data = TransactionData::ExecContract("set_u32".into(),
                 vec![ContractValue::U32(0), ContractValue::U32(new_value)]);
 
             let mut transaction = Transaction::create(branch_hash, trunk_hash,
-                vec![], contract_id, nonce, 0, data);
+                vec![], contract_id, nonce, mpt_root, data);
             transaction.sign(&mut key);
+            assert!(transaction.verify());
 
-            assert_eq!(dag.add_transaction(&transaction), TransactionStatus::Pending);
+            let updates = dag.try_add_transaction(&transaction).unwrap();
 
-            // Create another fake milestone to confirm
-            let nonce = proof_of_work(branch_nonce, transaction.get_nonce());
-            let mut fake_milestone = Transaction::create(transaction.get_hash(),
-                branch_hash, vec![], 0, nonce, 0, TransactionData::Empty);
-            let mut key = PrivateKey::new(&SHA512_256);
-            fake_milestone.sign(&mut key);
-            assert_eq!(dag.add_transaction(&fake_milestone), TransactionStatus::Pending);
-            dag.confirm_transactions(&fake_milestone);
-            assert_eq!(TransactionStatus::Accepted,
-                dag.get_confirmation_status(transaction.get_hash()));
+            let new_root = updates.get_storage_root().unwrap();
+            assert_eq!(dag.commit_transaction(transaction.clone(), updates).unwrap(),
+                TransactionStatus::Pending);
 
-            dag.get_contract(contract_id).unwrap();
+            assert_eq!(Ok(OOB::Borrowed(&ContractValue::U32(new_value))),
+                dag.storage.get(new_root, get_key(0, contract_id)));
         }
     }
 }

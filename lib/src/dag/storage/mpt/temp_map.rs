@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use dag::storage::map::{Map, MapResult, MapError};
+use dag::storage::map::{Map, OOB, MapResult, MapError};
 
 use super::{MerklePatriciaTree, NodeUpdates, node::Node};
 use super::mpt::{MPTStorageMap, MPTData};
@@ -52,9 +52,9 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
 }
 
 impl<'a, T: MPTData, M: MPTStorageMap<T>> Map<u64, Node<T>> for MPTTempMap<'a, T, M> {
-    fn get(&self, k: &u64) -> MapResult<&Node<T>> {
+    fn get<'b>(&'b self, k: &u64) -> MapResult<OOB<'b, Node<T>>> {
         self.new_nodes.get(&k)
-            .map_or(self.mpt.nodes.get(&k), |node| { Ok(node) })
+            .map_or(self.mpt.nodes.get(&k), |node| { Ok(OOB::Borrowed(node)) })
     }
 
     fn set(&mut self, k: u64, v: Node<T>) -> MapResult<()> {
@@ -76,14 +76,14 @@ mod tests {
             root = mpt.set(root, i, i).unwrap();
         }
         for i in 0..64 {
-            assert_eq!(mpt.get(root, i), Ok(&i));
+            assert_eq!(mpt.get(root, i), Ok(OOB::Borrowed(&i)));
         }
 
         let temp_map = MPTTempMap::new(&mpt);
         let mut temp_mpt: MerklePatriciaTree<u64, _> = MerklePatriciaTree::new(temp_map);
         let mut temp_root = root.clone();
         for i in 0..64 {
-            assert_eq!(temp_mpt.get(temp_root, i), Ok(&i));
+            assert_eq!(temp_mpt.get(temp_root, i), Ok(OOB::Borrowed(&i)));
         }
 
         for i in 64..128 {
@@ -91,7 +91,7 @@ mod tests {
         }
 
         for i in 0..128 {
-            assert_eq!(temp_mpt.get(temp_root, i), Ok(&i));
+            assert_eq!(temp_mpt.get(temp_root, i), Ok(OOB::Borrowed(&i)));
         }
     }
 }

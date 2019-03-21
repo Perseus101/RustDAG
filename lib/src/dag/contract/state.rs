@@ -1,5 +1,4 @@
 use std::hash::Hasher;
-use std::marker::{Send, Sync};
 
 use wasmi::{
     Error as InterpreterError, Trap, TrapKind, ModuleRef, Externals,
@@ -11,10 +10,11 @@ use dag::contract::{ContractValue, error::ContractError};
 use dag::storage::mpt::{
     MerklePatriciaTree, MPTStorageMap, NodeUpdates, temp_map::MPTTempMap
 };
+use dag::storage::map::MapResult;
 
 use security::hash::hasher::Sha3Hasher;
 
-pub trait ContractStateStorage = MPTStorageMap<ContractValue> + Send + Sync;
+pub trait ContractStateStorage = MPTStorageMap<ContractValue>;
 
 pub fn get_key(index: u32, contract: u64) -> u64 {
     let mut hasher = Sha3Hasher::new();
@@ -34,20 +34,20 @@ pub fn get_mapping_key(index: u32, key: u64, contract: u64) -> u64 {
 ///
 /// Uses copy on write to only store updated state, and holds a reference to the
 /// original contract state to access unmodified state.
-pub struct CachedContractState<'a, M: ContractStateStorage> {
+pub struct ContractState<'a, M: ContractStateStorage> {
     module: &'a ModuleRef,
     state: MerklePatriciaTree<ContractValue, MPTTempMap<'a, ContractValue, M>>,
     contract: u64,
     root: u64,
 }
 
-impl<'a, M: ContractStateStorage> CachedContractState<'a, M> {
+impl<'a, M: ContractStateStorage> ContractState<'a, M> {
 
     /// Create a new cached state from a contract state
     pub fn new(module: &'a ModuleRef,
             state: MerklePatriciaTree<ContractValue, MPTTempMap<'a, ContractValue, M>>,
             contract: u64, root: u64) -> Self {
-        CachedContractState {
+        ContractState {
             module,
             state,
             contract,
@@ -70,8 +70,8 @@ impl<'a, M: ContractStateStorage> CachedContractState<'a, M> {
         self.module.invoke_export(func_name, args, self)
     }
 
-    pub fn updates(self) -> Option<NodeUpdates<ContractValue>> {
-        self.state.inner_map().write_out(self.root).ok()
+    pub fn updates(self) -> MapResult<NodeUpdates<ContractValue>> {
+        self.state.inner_map().write_out(self.root)
     }
 
     fn get_key(&self, index: u32) -> u64 {
@@ -83,40 +83,40 @@ impl<'a, M: ContractStateStorage> CachedContractState<'a, M> {
     }
 
     fn get_u32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::U32(val)) => Ok(Some(RuntimeValue::I32(*val as i32))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
+            Ok(ContractValue::U32(val)) => Ok(Some(RuntimeValue::I32(val as i32))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_u64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(*val as i64))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
+            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(val as i64))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_f32(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::F32(val)) => Ok(Some(RuntimeValue::F32(F32::from(*val)))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
+            Ok(ContractValue::F32(val)) => Ok(Some(RuntimeValue::F32(F32::from(val)))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_f64(&self, index: u32) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_key(index)) {
-            Ok(ContractValue::F64(val)) => Ok(Some(RuntimeValue::F64(F64::from(*val)))),
+        match self.state.get(self.root, self.get_key(index)).map(|v| v.clone()) {
+            Ok(ContractValue::F64(val)) => Ok(Some(RuntimeValue::F64(F64::from(val)))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
     }
 
     fn get_mapping(&self, index: u32, key: u64) -> Result<Option<RuntimeValue>, Trap> {
-        match self.state.get(self.root, self.get_mapping_key(index, key)) {
-            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(*val as i64))),
+        match self.state.get(self.root, self.get_mapping_key(index, key)).map(|v| v.clone()) {
+            Ok(ContractValue::U64(val)) => Ok(Some(RuntimeValue::I64(val as i64))),
             Ok(_) => Err(Trap::new(TrapKind::Unreachable)),
             Err(_) => Err(Trap::new(TrapKind::MemoryAccessOutOfBounds))
         }
@@ -158,7 +158,7 @@ impl<'a, M: ContractStateStorage> CachedContractState<'a, M> {
     }
 }
 
-impl<'a, M: ContractStateStorage> Externals for CachedContractState<'a, M> {
+impl<'a, M: ContractStateStorage> Externals for ContractState<'a, M> {
     fn invoke_index(
         &mut self,
         index: usize,
@@ -236,6 +236,7 @@ mod tests {
     use wasmi::{Module, ModuleInstance, ModuleRef, ImportsBuilder};
 
     use dag::storage::mpt::temp_map::MPTTempMap;
+    use dag::storage::map::OOB;
 
     fn load_module_from_file(filename: String) -> Module {
         let mut file = File::open(filename).expect("Could not open test file");
@@ -265,7 +266,7 @@ mod tests {
 
         // Update a single value
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_u32",
                 &[RuntimeValue::I32(0), RuntimeValue::I32(10)]).is_ok());
@@ -278,7 +279,7 @@ mod tests {
 
         // Assert the value is set
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_u32", &[RuntimeValue::I32(2)]).is_err());
@@ -291,7 +292,7 @@ mod tests {
 
         // Update multiple values
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_u32",
                 &[RuntimeValue::I32(0), RuntimeValue::I32(15)]).is_ok());
@@ -303,11 +304,11 @@ mod tests {
         root = updates.get_root_hash();
         assert!(mpt.commit_set(updates).is_ok());
 
-        assert_eq!(mpt.get(root, get_key(0, 0)), Ok(&ContractValue::U32(15)));
-        assert_eq!(mpt.get(root, get_key(1, 0)), Ok(&ContractValue::U32(100)));
+        assert_eq!(mpt.get(root, get_key(0, 0)), Ok(OOB::Borrowed(&ContractValue::U32(15))));
+        assert_eq!(mpt.get(root, get_key(1, 0)), Ok(OOB::Borrowed(&ContractValue::U32(100))));
         // Assert the values are changed
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_u32", &[RuntimeValue::I32(2)]).is_err());
@@ -329,7 +330,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_u64",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(10)]).is_ok());
@@ -340,7 +341,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_u64", &[RuntimeValue::I32(1)]).is_err());
@@ -359,7 +360,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_f32",
                 &[RuntimeValue::I32(0), RuntimeValue::F32(10f32.into())]).is_ok());
@@ -370,7 +371,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_f32", &[RuntimeValue::I32(1)]).is_err());
@@ -389,7 +390,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_f64",
                 &[RuntimeValue::I32(0), RuntimeValue::F64(10f64.into())]).is_ok());
@@ -400,7 +401,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             // Error, out of bounds
             assert!(temp_state.exec("get_f64", &[RuntimeValue::I32(1)]).is_err());
@@ -419,7 +420,7 @@ mod tests {
         let contract_id = 0;
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("get_mapping",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(0)]).is_err());
@@ -432,7 +433,7 @@ mod tests {
         assert!(mpt.commit_set(updates).is_ok());
 
         let updates = {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert!(temp_state.exec("set_mapping",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(1), RuntimeValue::I64(10)]).is_ok());
@@ -441,11 +442,11 @@ mod tests {
 
         root = updates.get_root_hash();
         assert!(mpt.commit_set(updates).is_ok());
-        assert_eq!(mpt.get(root, get_mapping_key(0, 0, contract_id)), Ok(&ContractValue::U64(0)));
-        assert_eq!(mpt.get(root, get_mapping_key(0, 1, contract_id)), Ok(&ContractValue::U64(10)));
+        assert_eq!(mpt.get(root, get_mapping_key(0, 0, contract_id)), Ok(OOB::Borrowed(&ContractValue::U64(0))));
+        assert_eq!(mpt.get(root, get_mapping_key(0, 1, contract_id)), Ok(OOB::Borrowed(&ContractValue::U64(10))));
 
         {
-            let mut temp_state = CachedContractState::new(&module,
+            let mut temp_state = ContractState::new(&module,
                 MerklePatriciaTree::new(MPTTempMap::new(&mpt)), contract_id, root);
             assert_eq!(Some(RuntimeValue::I64(0)), temp_state.exec("get_mapping",
                 &[RuntimeValue::I32(0), RuntimeValue::I64(0)]).unwrap());

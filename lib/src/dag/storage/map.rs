@@ -4,6 +4,7 @@ use std::hash::Hash;
 
 use std::error::Error;
 use std::fmt;
+use std::ops::Deref;
 
 #[derive(PartialEq, Debug)]
 pub enum MapError {
@@ -25,16 +26,39 @@ impl Error for MapError {}
 pub type MapResult<T> = Result<T, MapError>;
 
 pub trait Map<K: Eq + Hash, V> {
-    fn get(&self, k: &K) -> MapResult<&V>;
+    fn get<'a>(&'a self, k: &K) -> MapResult<OOB<'a, V>>;
     fn set(&mut self, k: K, v: V) -> MapResult<()>;
 }
 
-impl<K: Eq + Hash, V, S: std::hash::BuildHasher> Map<K, V> for HashMap<K, V, S> {
-    fn get(&self, k: &K) -> MapResult<&V> {
-        HashMap::get(self, k).map_or(Err(MapError::NotFound), |v| { Ok(v) })
+impl<K: Eq + Hash, V> Map<K, V> for HashMap<K, V> {
+    fn get<'a>(&'a self, k: &K) -> MapResult<OOB<'a, V>>{
+        HashMap::get(self, k).map_or(Err(MapError::NotFound), |v| { Ok(OOB::Borrowed(v)) })
     }
     fn set(&mut self, k: K, v: V) -> MapResult<()> {
         HashMap::insert(self, k, v);
         Ok(())
+    }
+}
+
+#[derive(PartialEq, Hash, Debug)]
+pub enum OOB<'a, T> {
+    Owned(T),
+    Borrowed(&'a T)
+}
+
+impl<'a, T> OOB<'a, T> {
+    pub fn borrow(&'a self) -> &'a T {
+        match self {
+            OOB::Owned(t) => &t,
+            OOB::Borrowed(ref t) => return t
+        }
+    }
+}
+
+impl<'a, T> Deref for OOB<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        self.borrow()
     }
 }

@@ -1,4 +1,9 @@
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::fmt;
+
+use serde::ser::{Serialize, Serializer};
+use serde::de::{Deserialize, Deserializer, Visitor, EnumAccess, VariantAccess};
 
 use security::hash::hasher::Sha3Hasher;
 
@@ -14,7 +19,7 @@ fn get_bottom_nibble(val: u64) -> u8 {
     (val & 0x0000_0000_0000_000F) as u8
 }
 
-#[derive(Clone, Hash, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Debug)]
 pub struct PointerNode {
     x_0: Option<u64>,
     x_1: Option<u64>,
@@ -159,10 +164,75 @@ impl<T: MPTData> Node<T> {
     }
 }
 
+impl<T: MPTData + Serialize> Serialize for Node<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Node::BranchNode(ptr) => {
+                serializer.serialize_newtype_variant("Node", 0, "BranchNode", ptr)
+            },
+            Node::LeafNode(value) => {
+                serializer.serialize_newtype_variant("Node", 1, "LeafNode", value)
+            }
+        }
+    }
+}
+
+impl<'de, T: 'de + MPTData + Deserialize<'de>> Deserialize<'de> for Node<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier)]
+        enum Field {
+            BranchNode,
+            LeafNode
+        }
+
+
+        struct NodeVisitor<'de, T: 'de + MPTData + Deserialize<'de>> {
+            _p: PhantomData<T>,
+            _l: PhantomData<&'de ()>,
+        };
+
+        impl<'de, T: 'de + MPTData + Deserialize<'de>> Visitor<'de> for NodeVisitor<'de, T> {
+            type Value = Node<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("enum Node")
+            }
+
+            fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+            where
+                A: EnumAccess<'de>,
+            {
+                match data.variant()? {
+                    (Field::BranchNode, variant) => {
+                        Ok(Node::BranchNode(variant.newtype_variant()?))
+                    },
+                    (Field::LeafNode, variant) => {
+                        Ok(Node::LeafNode(variant.newtype_variant()?))
+                    }
+                }
+            }
+        }
+
+        const VARIANTS: &[&str] = &[
+            "BranchNode",
+            "LeafNode",
+        ];
+        deserializer.deserialize_enum("Node", VARIANTS,
+            NodeVisitor { _p: PhantomData, _l: PhantomData })
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn test_get_top_nibble() {
@@ -212,5 +282,57 @@ mod tests {
         assert_eq!(0xF, get_bottom_nibble(0x0000_0000_000E_000F));
         assert_eq!(0xF, get_bottom_nibble(0xE000_0000_0000_000F));
         assert_eq!(0xF, get_bottom_nibble(0xFFFF_FFFF_FFFF_FFFF));
+    }
+
+    #[test]
+    fn test_serialize() {
+        let branch_node = Node::BranchNode::<u64>(PointerNode::default());
+        let branch_json = json!({
+            "BranchNode": {
+                "x_0": null, "x_1": null, "x_2": null, "x_3": null,
+                "x_4": null, "x_5": null, "x_6": null, "x_7": null,
+                "x_8": null, "x_9": null, "x_a": null, "x_b": null,
+                "x_c": null, "x_d": null, "x_e": null, "x_f": null
+            }
+        });
+        assert_eq!(branch_json, serde_json::to_value(branch_node).unwrap());
+
+        let leaf_node = Node::LeafNode::<u64>(5);
+        let leaf_json = json!({ "LeafNode": 5 });
+        assert_eq!(leaf_json, serde_json::to_value(leaf_node).unwrap());
+    }
+
+    #[test]
+    fn test_deserialize() {
+        let branch_node = Node::BranchNode::<u64>(PointerNode::default());
+        let branch_json = json!({
+            "BranchNode": {
+                "x_0": null, "x_1": null, "x_2": null, "x_3": null,
+                "x_4": null, "x_5": null, "x_6": null, "x_7": null,
+                "x_8": null, "x_9": null, "x_a": null, "x_b": null,
+                "x_c": null, "x_d": null, "x_e": null, "x_f": null
+            }
+        });
+        assert_eq!(branch_node, serde_json::from_value(branch_json).unwrap());
+
+        let leaf_node = Node::LeafNode::<u64>(5);
+        let leaf_json = json!({ "LeafNode": 5 });
+        assert_eq!(leaf_node, serde_json::from_value(leaf_json).unwrap());
+    }
+
+    #[test]
+    fn test_serialize_deserialize() {
+        // Check that the branch node is identical after serializing and deserializing
+        let branch_node = Node::BranchNode::<u64>(PointerNode::default());
+        let json_value = serde_json::to_value(branch_node.clone()).unwrap();
+        assert_eq!(branch_node, serde_json::from_value(json_value).unwrap());
+
+        // Check that a non-null branch node is identical as well
+        let mut ptr = PointerNode::default();
+        ptr.set_hash(0, 10);
+        let branch_node = Node::BranchNode::<u64>(ptr);
+        let json_value = serde_json::to_value(branch_node.clone()).unwrap();
+        assert_eq!(branch_node, serde_json::from_value(json_value).unwrap());
+
     }
 }
