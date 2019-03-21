@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::cell::RefCell;
 
 extern crate restson;
 use self::restson::{RestClient, RestPath, Error};
@@ -52,7 +53,7 @@ pub struct TransactionPeer(Peer);
 pub struct ContractPeer(Peer);
 pub struct MPTNodePeer {
     peer: Peer,
-    nodes: HashMap<u64, Node<ContractValue>>
+    nodes: RefCell<HashMap<u64, Node<ContractValue>>>
 }
 
 impl Peer {
@@ -65,7 +66,7 @@ impl Peer {
     pub fn into_remote_blockdag(self) -> BlockDAG<MPTNodePeer, TransactionPeer, ContractPeer> {
         let t = TransactionPeer(self.clone());
         let c = ContractPeer(self.clone());
-        let m = MPTNodePeer { peer: self, nodes: HashMap::new() };
+        let m = MPTNodePeer { peer: self, nodes: RefCell::default() };
 
         BlockDAG::new(t, c, m)
     }
@@ -128,19 +129,19 @@ impl Map<u64, Contract> for ContractPeer {
 impl Map<u64, Node<ContractValue>> for MPTNodePeer {
     fn get(&self, k: &u64) -> MapResult<OOB<Node<ContractValue>>> {
         // Get from the local nodes
-        // If no nodes exist, then check the remote nodes
-        self.nodes.get(k).map_or_else(|| {
-                self.peer.get_mpt_node(*k)
-                    .map_err(|_| { MapError::LookupError })
-                    .map(|node| { OOB::Owned(node) })
-            },
-            |node| {
-                Ok(OOB::Borrowed(node))
-            }
-        )
+        let nodes_borrow = self.nodes.borrow();
+        if let Some(node) = nodes_borrow.get(k) {
+            return Ok(OOB::Owned(node.clone()));
+        }
+        // If the node does not exist, request from peer
+        drop(nodes_borrow);
+        let node = self.peer.get_mpt_node(*k)
+            .map_err(|_err| { MapError::LookupError })?;
+        self.nodes.borrow_mut().insert(*k, node.clone());
+        Ok(OOB::Owned(node))
     }
     fn set(&mut self, k: u64, v: Node<ContractValue>) -> MapResult<()> {
-        self.nodes.insert(k, v);
+        self.nodes.borrow_mut().insert(k, v);
         Ok(())
     }
 }
