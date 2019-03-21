@@ -78,10 +78,10 @@ pub fn __ofc__state_mapping() -> u32 {
 #[no_mangle]
 pub fn init() {
     api::set_u32(0, 1);
-    api::set_u64(0, 1);
-    api::set_f32(0, 1f32);
-    api::set_f64(0, 1f64);
-    api::set_mapping(0, 0, 1);
+    api::set_u64(1, 2);
+    api::set_f32(2, 3f32);
+    api::set_f64(3, 4f64);
+    api::set_mapping(4, 0, 5);
 }
 /////////////////////// Contract functions ///////////////////////
 #[no_mangle]

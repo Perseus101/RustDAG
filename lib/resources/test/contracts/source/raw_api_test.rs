@@ -49,6 +49,9 @@ mod api {
 }
 
 #[no_mangle]
+pub fn init() {}
+
+#[no_mangle]
 pub fn get_u32(index: u32) -> u32 {
     api::get_u32(index)
 }
