@@ -6,7 +6,7 @@ use wasmi::{
 };
 
 use dag::contract::resolver::*;
-use dag::contract::ContractValue;
+use dag::contract::{ContractValue, error::ContractError};
 use dag::storage::mpt::{
     MerklePatriciaTree, MPTStorageMap, NodeUpdates, temp_map::MPTTempMap
 };
@@ -71,7 +71,7 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
     }
 
     pub fn updates(self) -> MapResult<NodeUpdates<ContractValue>> {
-        self.state.inner_map().write_out(&self.root)
+        self.state.inner_map().write_out(self.root)
     }
 
     fn get_key(&self, index: u32) -> u64 {
@@ -122,37 +122,38 @@ impl<'a, M: ContractStateStorage> ContractState<'a, M> {
         }
     }
 
-    fn set(&mut self, index: u64, value: ContractValue) {
-        self.root = self.state.set(self.root, index, value);
-    }
-
-    fn set_u32(&mut self, index: u32, value: u32) -> Result<(), Trap> {
-        let idx = self.get_key(index);
-        self.set(idx, ContractValue::U32(value));
+    fn set(&mut self, index: u64, value: ContractValue) -> Result<(), ContractError> {
+        self.root = self.state.set(self.root, index, value)?;
         Ok(())
     }
 
-    fn set_u64(&mut self, index: u32, value: u64) -> Result<(), Trap> {
+    fn set_u32(&mut self, index: u32, value: u32) -> Result<(), ContractError> {
         let idx = self.get_key(index);
-        self.set(idx, ContractValue::U64(value));
+        self.set(idx, ContractValue::U32(value))?;
         Ok(())
     }
 
-    fn set_f32(&mut self, index: u32, value: f32) -> Result<(), Trap> {
+    fn set_u64(&mut self, index: u32, value: u64) -> Result<(), ContractError> {
         let idx = self.get_key(index);
-        self.set(idx, ContractValue::F32(value));
+        self.set(idx, ContractValue::U64(value))?;
         Ok(())
     }
 
-    fn set_f64(&mut self, index: u32, value: f64) -> Result<(), Trap> {
+    fn set_f32(&mut self, index: u32, value: f32) -> Result<(), ContractError> {
         let idx = self.get_key(index);
-        self.set(idx, ContractValue::F64(value));
+        self.set(idx, ContractValue::F32(value))?;
         Ok(())
     }
 
-    fn set_mapping(&mut self, index: u32, key: u64, value: u64) -> Result<(), Trap> {
+    fn set_f64(&mut self, index: u32, value: f64) -> Result<(), ContractError> {
+        let idx = self.get_key(index);
+        self.set(idx, ContractValue::F64(value))?;
+        Ok(())
+    }
+
+    fn set_mapping(&mut self, index: u32, key: u64, value: u64) -> Result<(), ContractError> {
         let idx = self.get_mapping_key(index, key);
-        self.set(idx, ContractValue::U64(value));
+        self.set(idx, ContractValue::U64(value))?;
         Ok(())
     }
 }

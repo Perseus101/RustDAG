@@ -55,7 +55,7 @@ fn main() {
 
     let mut trunk_hash = contract_id;
     // Execute the contract grant function
-    // let contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
+    // let mut contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
     for data in [
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(1), ContractValue::U64(101)]),
             TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(2), ContractValue::U64(102)]),

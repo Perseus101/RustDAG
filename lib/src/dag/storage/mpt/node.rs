@@ -129,7 +129,7 @@ impl<'a> PointerNodeIterator<'a> {
     fn new(node: &'a PointerNode) -> Self {
         PointerNodeIterator {
             index: 0,
-            node: node
+            node
         }
     }
 }
@@ -150,6 +150,7 @@ impl<'a> Iterator for PointerNodeIterator<'a> {
 }
 
 #[derive(Clone, Hash, PartialEq, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Node<T: MPTData> {
     BranchNode(PointerNode),
     LeafNode(T)

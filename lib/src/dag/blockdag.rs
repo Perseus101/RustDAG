@@ -61,7 +61,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
 			transactions: transaction_storage,
             pending_transactions: HashMap::default(),
             contracts: contract_storage,
-            storage: storage,
+            storage,
             milestones: MilestoneTracker::new(genesis_milestone),
             tips: Vec::new(),
 		};
@@ -72,7 +72,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         let genesis_branch_hash = genesis_branch.get_hash();
 
         dag.transactions.set(genesis_transaction_hash, genesis_transaction);
-        dag.pending_transactions.set(genesis_branch_hash, genesis_branch.into());
+        dag.pending_transactions.set(genesis_branch_hash, genesis_branch);
         dag.tips.push(genesis_transaction_hash);
         dag.tips.push(genesis_branch_hash);
 

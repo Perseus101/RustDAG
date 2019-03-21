@@ -19,7 +19,7 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
         }
     }
 
-    pub fn write_out(mut self, root: &u64) -> MapResult<NodeUpdates<T>> {
+    pub fn write_out(mut self, root: u64) -> MapResult<NodeUpdates<T>> {
         /// Move root and all its children from nodes_in to nodes out
         fn move_nodes<T: MPTData>(root: Node<T>, nodes_in: &mut HashMap<u64, Node<T>>,
                 nodes_out: &mut Vec<Node<T>>) {
@@ -42,7 +42,7 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
         }
 
         let mut branches = Vec::new();
-        let root = self.new_nodes.remove(root)
+        let root = self.new_nodes.remove(&root)
             .map_or(Err(MapError::NotFound), |node| { Ok(node) })?;
 
         move_nodes_recurse(&root, &mut self.new_nodes, &mut branches);
@@ -73,7 +73,7 @@ mod tests {
         let mut root = mpt.default_root();
 
         for i in 0..64 {
-            root = mpt.set(root, i, i);
+            root = mpt.set(root, i, i).unwrap();
         }
         for i in 0..64 {
             assert_eq!(mpt.get(root, i), Ok(OOB::Borrowed(&i)));
@@ -87,7 +87,7 @@ mod tests {
         }
 
         for i in 64..128 {
-            temp_root = temp_mpt.set(temp_root, i, i);
+            temp_root = temp_mpt.set(temp_root, i, i).unwrap();
         }
 
         for i in 0..128 {
