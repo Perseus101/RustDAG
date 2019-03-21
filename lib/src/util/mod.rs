@@ -1,8 +1,8 @@
-mod misc;
 mod hex_transaction;
+mod misc;
 
-pub mod types;
 pub mod peer;
+pub mod types;
 
-pub use self::misc::*;
 pub use self::hex_transaction::HexEncodedTransaction;
+pub use self::misc::*;

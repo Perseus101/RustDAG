@@ -5,7 +5,7 @@ use dag::storage::map::MapError;
 
 #[derive(Debug, PartialEq)]
 pub enum TransactionError {
-    Rejected(String)
+    Rejected(String),
 }
 
 impl fmt::Display for TransactionError {

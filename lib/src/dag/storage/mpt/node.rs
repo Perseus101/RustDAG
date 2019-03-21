@@ -1,9 +1,9 @@
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::fmt;
 
+use serde::de::{Deserialize, Deserializer, EnumAccess, VariantAccess, Visitor};
 use serde::ser::{Serialize, Serializer};
-use serde::de::{Deserialize, Deserializer, Visitor, EnumAccess, VariantAccess};
 
 use security::hash::hasher::Sha3Hasher;
 
@@ -36,7 +36,7 @@ pub struct PointerNode {
     x_c: Option<u64>,
     x_d: Option<u64>,
     x_e: Option<u64>,
-    x_f: Option<u64>
+    x_f: Option<u64>,
 }
 
 impl Default for PointerNode {
@@ -122,15 +122,12 @@ impl PointerNode {
 
 pub struct PointerNodeIterator<'a> {
     index: u8,
-    node: &'a PointerNode
+    node: &'a PointerNode,
 }
 
 impl<'a> PointerNodeIterator<'a> {
     fn new(node: &'a PointerNode) -> Self {
-        PointerNodeIterator {
-            index: 0,
-            node
-        }
+        PointerNodeIterator { index: 0, node }
     }
 }
 
@@ -153,7 +150,7 @@ impl<'a> Iterator for PointerNodeIterator<'a> {
 #[allow(clippy::large_enum_variant)]
 pub enum Node<T: MPTData> {
     BranchNode(PointerNode),
-    LeafNode(T)
+    LeafNode(T),
 }
 
 impl<T: MPTData> Node<T> {
@@ -172,7 +169,7 @@ impl<T: MPTData + Serialize> Serialize for Node<T> {
         match self {
             Node::BranchNode(ptr) => {
                 serializer.serialize_newtype_variant("Node", 0, "BranchNode", ptr)
-            },
+            }
             Node::LeafNode(value) => {
                 serializer.serialize_newtype_variant("Node", 1, "LeafNode", value)
             }
@@ -189,9 +186,8 @@ impl<'de, T: 'de + MPTData + Deserialize<'de>> Deserialize<'de> for Node<T> {
         #[serde(field_identifier)]
         enum Field {
             BranchNode,
-            LeafNode
+            LeafNode,
         }
-
 
         struct NodeVisitor<'de, T: 'de + MPTData + Deserialize<'de>> {
             _p: PhantomData<T>,
@@ -212,23 +208,23 @@ impl<'de, T: 'de + MPTData + Deserialize<'de>> Deserialize<'de> for Node<T> {
                 match data.variant()? {
                     (Field::BranchNode, variant) => {
                         Ok(Node::BranchNode(variant.newtype_variant()?))
-                    },
-                    (Field::LeafNode, variant) => {
-                        Ok(Node::LeafNode(variant.newtype_variant()?))
                     }
+                    (Field::LeafNode, variant) => Ok(Node::LeafNode(variant.newtype_variant()?)),
                 }
             }
         }
 
-        const VARIANTS: &[&str] = &[
-            "BranchNode",
-            "LeafNode",
-        ];
-        deserializer.deserialize_enum("Node", VARIANTS,
-            NodeVisitor { _p: PhantomData, _l: PhantomData })
+        const VARIANTS: &[&str] = &["BranchNode", "LeafNode"];
+        deserializer.deserialize_enum(
+            "Node",
+            VARIANTS,
+            NodeVisitor {
+                _p: PhantomData,
+                _l: PhantomData,
+            },
+        )
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -333,6 +329,5 @@ mod tests {
         let branch_node = Node::BranchNode::<u64>(ptr);
         let json_value = serde_json::to_value(branch_node.clone()).unwrap();
         assert_eq!(branch_node, serde_json::from_value(json_value).unwrap());
-
     }
 }

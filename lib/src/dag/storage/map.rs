@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::cmp::Eq;
+use std::collections::HashMap;
 use std::hash::Hash;
 
 use std::error::Error;
@@ -31,8 +31,8 @@ pub trait Map<K: Eq + Hash, V> {
 }
 
 impl<K: Eq + Hash, V> Map<K, V> for HashMap<K, V> {
-    fn get<'a>(&'a self, k: &K) -> MapResult<OOB<'a, V>>{
-        HashMap::get(self, k).map_or(Err(MapError::NotFound), |v| { Ok(OOB::Borrowed(v)) })
+    fn get<'a>(&'a self, k: &K) -> MapResult<OOB<'a, V>> {
+        HashMap::get(self, k).map_or(Err(MapError::NotFound), |v| Ok(OOB::Borrowed(v)))
     }
     fn set(&mut self, k: K, v: V) -> MapResult<()> {
         HashMap::insert(self, k, v);
@@ -43,14 +43,14 @@ impl<K: Eq + Hash, V> Map<K, V> for HashMap<K, V> {
 #[derive(PartialEq, Hash, Debug)]
 pub enum OOB<'a, T> {
     Owned(T),
-    Borrowed(&'a T)
+    Borrowed(&'a T),
 }
 
 impl<'a, T> OOB<'a, T> {
     pub fn borrow(&'a self) -> &'a T {
         match self {
             OOB::Owned(t) => &t,
-            OOB::Borrowed(ref t) => return t
+            OOB::Borrowed(ref t) => return t,
         }
     }
 }

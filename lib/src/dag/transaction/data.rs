@@ -1,4 +1,4 @@
-use dag::contract::{ContractValue, source::ContractSource};
+use dag::contract::{source::ContractSource, ContractValue};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Hash, Debug)]
 pub enum TransactionData {

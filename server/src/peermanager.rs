@@ -1,15 +1,13 @@
 use util::peer::Peer;
 
 pub struct PeerManager {
-    peers: Vec<Peer>
+    peers: Vec<Peer>,
 }
 
 impl PeerManager {
     #[allow(clippy::new_without_default)]
     pub fn new() -> PeerManager {
-        PeerManager {
-            peers: Vec::new(),
-        }
+        PeerManager { peers: Vec::new() }
     }
 
     pub fn add_peer(&mut self, peer: Peer) {
@@ -17,7 +15,9 @@ impl PeerManager {
     }
 
     pub fn map_peers<U, F>(&self, f: F) -> Vec<U>
-        where F: Fn(&Peer) -> U {
+    where
+        F: Fn(&Peer) -> U,
+    {
         self.peers.iter().map(f).collect()
     }
 }

@@ -5,7 +5,7 @@ use dag::storage::mpt::NodeUpdates;
 pub struct TransactionUpdates {
     pub contract: Option<Contract>,
     pub node_updates: Option<NodeUpdates<ContractValue>>,
-    pub referenced: Vec<u64>
+    pub referenced: Vec<u64>,
 }
 
 impl TransactionUpdates {
@@ -13,7 +13,7 @@ impl TransactionUpdates {
         TransactionUpdates {
             contract: None,
             node_updates: None,
-            referenced
+            referenced,
         }
     }
 
@@ -28,10 +28,8 @@ impl TransactionUpdates {
     pub fn get_storage_root(&self) -> Option<u64> {
         if let Some(ref updates) = self.node_updates {
             Some(updates.get_root_hash())
-        }
-        else {
+        } else {
             None
         }
     }
-
 }

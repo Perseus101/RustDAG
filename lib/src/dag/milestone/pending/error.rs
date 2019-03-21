@@ -9,7 +9,7 @@ pub enum MilestoneError {
     DuplicateChain,
     StaleSignature,
     DuplicateMilestone,
-    NotPending
+    NotPending,
 }
 
 impl Error for MilestoneError {}
@@ -33,7 +33,7 @@ impl MilestoneError {
             MilestoneError::DuplicateChain => _MilestoneErrorTag::DuplicateChain(pending),
             MilestoneError::StaleSignature => _MilestoneErrorTag::StaleSignature(pending),
             MilestoneError::DuplicateMilestone => _MilestoneErrorTag::DuplicateMilestone(pending),
-            MilestoneError::NotPending => _MilestoneErrorTag::NotPending(pending)
+            MilestoneError::NotPending => _MilestoneErrorTag::NotPending(pending),
         }
     }
 }
@@ -49,7 +49,7 @@ pub enum _MilestoneErrorTag {
     DuplicateChain(PendingMilestone),
     StaleSignature(PendingMilestone),
     DuplicateMilestone(PendingMilestone),
-    NotPending(PendingMilestone)
+    NotPending(PendingMilestone),
 }
 
 impl Error for _MilestoneErrorTag {}
@@ -61,7 +61,7 @@ impl fmt::Debug for _MilestoneErrorTag {
             _MilestoneErrorTag::DuplicateChain(_) => write!(f, "Duplicate Chain"),
             _MilestoneErrorTag::StaleSignature(_) => write!(f, "Stale Signature"),
             _MilestoneErrorTag::DuplicateMilestone(_) => write!(f, "Duplicate Milestone"),
-            _MilestoneErrorTag::NotPending(_) => write!(f, "Pending Milestone not found")
+            _MilestoneErrorTag::NotPending(_) => write!(f, "Pending Milestone not found"),
         }
     }
 }
@@ -73,7 +73,7 @@ impl fmt::Display for _MilestoneErrorTag {
             _MilestoneErrorTag::DuplicateChain(_) => write!(f, "Duplicate Chain"),
             _MilestoneErrorTag::StaleSignature(_) => write!(f, "Stale Signature"),
             _MilestoneErrorTag::DuplicateMilestone(_) => write!(f, "Duplicate Milestone"),
-            _MilestoneErrorTag::NotPending(_) => write!(f, "Pending Milestone not found")
+            _MilestoneErrorTag::NotPending(_) => write!(f, "Pending Milestone not found"),
         }
     }
 }
@@ -82,10 +82,16 @@ impl _MilestoneErrorTag {
     pub fn convert(self) -> (PendingMilestone, MilestoneError) {
         match self {
             _MilestoneErrorTag::StaleChain(pending) => (pending, MilestoneError::StaleChain),
-            _MilestoneErrorTag::DuplicateChain(pending) => (pending, MilestoneError::DuplicateChain),
-            _MilestoneErrorTag::StaleSignature(pending) => (pending, MilestoneError::StaleSignature),
-            _MilestoneErrorTag::DuplicateMilestone(pending) => (pending, MilestoneError::DuplicateMilestone),
-            _MilestoneErrorTag::NotPending(pending) => (pending, MilestoneError::NotPending)
+            _MilestoneErrorTag::DuplicateChain(pending) => {
+                (pending, MilestoneError::DuplicateChain)
+            }
+            _MilestoneErrorTag::StaleSignature(pending) => {
+                (pending, MilestoneError::StaleSignature)
+            }
+            _MilestoneErrorTag::DuplicateMilestone(pending) => {
+                (pending, MilestoneError::DuplicateMilestone)
+            }
+            _MilestoneErrorTag::NotPending(pending) => (pending, MilestoneError::NotPending),
         }
     }
 }

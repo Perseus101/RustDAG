@@ -1,9 +1,9 @@
 use std::error::Error;
 use std::fmt;
 
-use wasmi::HostError;
-use wasmi::Error as WasmError;
 use dag::storage::map::MapError;
+use wasmi::Error as WasmError;
+use wasmi::HostError;
 
 #[derive(Debug)]
 pub enum ContractError {

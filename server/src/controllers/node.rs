@@ -1,7 +1,7 @@
 use rocket::{Route, State};
 use rocket_contrib::json::Json;
 
-use rustdag_lib::dag::{storage::mpt::node::Node, contract::ContractValue};
+use rustdag_lib::dag::{contract::ContractValue, storage::mpt::node::Node};
 
 use dagmanager::DAGManager;
 

@@ -20,5 +20,5 @@ pub enum TransactionStatus {
     Accepted,
     Rejected(String),
     Pending,
-    Milestone
+    Milestone,
 }

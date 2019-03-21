@@ -1,35 +1,41 @@
 use std::collections::HashMap;
 
-use dag::storage::map::{Map, OOB, MapResult, MapError};
+use dag::storage::map::{Map, MapError, MapResult, OOB};
 
-use super::{MerklePatriciaTree, NodeUpdates, node::Node};
-use super::mpt::{MPTStorageMap, MPTData};
+use super::mpt::{MPTData, MPTStorageMap};
+use super::{node::Node, MerklePatriciaTree, NodeUpdates};
 
 /// Temporary map to store updates to a MerklePatriciaTree
 pub struct MPTTempMap<'a, T: MPTData, M: MPTStorageMap<T>> {
     mpt: &'a MerklePatriciaTree<T, M>,
-    new_nodes: HashMap<u64, Node<T>>
+    new_nodes: HashMap<u64, Node<T>>,
 }
 
 impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
     pub fn new(mpt: &'a MerklePatriciaTree<T, M>) -> Self {
         MPTTempMap {
             mpt,
-            new_nodes: HashMap::new()
+            new_nodes: HashMap::new(),
         }
     }
 
     pub fn write_out(mut self, root: u64) -> MapResult<NodeUpdates<T>> {
         /// Move root and all its children from nodes_in to nodes out
-        fn move_nodes<T: MPTData>(root: Node<T>, nodes_in: &mut HashMap<u64, Node<T>>,
-                nodes_out: &mut Vec<Node<T>>) {
+        fn move_nodes<T: MPTData>(
+            root: Node<T>,
+            nodes_in: &mut HashMap<u64, Node<T>>,
+            nodes_out: &mut Vec<Node<T>>,
+        ) {
             move_nodes_recurse(&root, nodes_in, nodes_out);
             nodes_out.push(root);
         }
 
         /// Move the children of root from nodes_in to nodes out
-        fn move_nodes_recurse<T: MPTData>(root: &Node<T>, nodes_in: &mut HashMap<u64, Node<T>>,
-                nodes_out: &mut Vec<Node<T>>) {
+        fn move_nodes_recurse<T: MPTData>(
+            root: &Node<T>,
+            nodes_in: &mut HashMap<u64, Node<T>>,
+            nodes_out: &mut Vec<Node<T>>,
+        ) {
             if let Node::BranchNode(root_ptr) = root {
                 for opt_node_hash in root_ptr.iter() {
                     if let Some(node_hash) = opt_node_hash {
@@ -42,8 +48,10 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
         }
 
         let mut branches = Vec::new();
-        let root = self.new_nodes.remove(&root)
-            .map_or(Err(MapError::NotFound), |node| { Ok(node) })?;
+        let root = self
+            .new_nodes
+            .remove(&root)
+            .map_or(Err(MapError::NotFound), |node| Ok(node))?;
 
         move_nodes_recurse(&root, &mut self.new_nodes, &mut branches);
 
@@ -53,8 +61,9 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
 
 impl<'a, T: MPTData, M: MPTStorageMap<T>> Map<u64, Node<T>> for MPTTempMap<'a, T, M> {
     fn get<'b>(&'b self, k: &u64) -> MapResult<OOB<'b, Node<T>>> {
-        self.new_nodes.get(&k)
-            .map_or(self.mpt.nodes.get(&k), |node| { Ok(OOB::Borrowed(node)) })
+        self.new_nodes
+            .get(&k)
+            .map_or(self.mpt.nodes.get(&k), |node| Ok(OOB::Borrowed(node)))
     }
 
     fn set(&mut self, k: u64, v: Node<T>) -> MapResult<()> {

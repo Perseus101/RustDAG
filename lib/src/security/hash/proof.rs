@@ -1,4 +1,4 @@
-use security::hash::sha3::{Sha3_512,Digest};
+use security::hash::sha3::{Digest, Sha3_512};
 
 #[cfg(not(test))]
 const MIN_WEIGHT_MAGNITUDE: usize = 2;
@@ -19,7 +19,7 @@ pub fn valid_proof(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> bool {
     hasher.input(&guess);
     let hash = hasher.result();
 
-    for b in hash.as_slice()[hash.len()-MIN_WEIGHT_MAGNITUDE..].iter() {
+    for b in hash.as_slice()[hash.len() - MIN_WEIGHT_MAGNITUDE..].iter() {
         if *b != 0u8 {
             return false;
         }
@@ -27,12 +27,11 @@ pub fn valid_proof(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> bool {
     true
 }
 
-fn nonces_to_bytes(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> [u8;12] {
-    let mut nonces: u128 =
-          (u128::from(trunk_nonce.to_le()) << 64)
+fn nonces_to_bytes(trunk_nonce: u32, branch_nonce: u32, nonce: u32) -> [u8; 12] {
+    let mut nonces: u128 = (u128::from(trunk_nonce.to_le()) << 64)
         + (u128::from(branch_nonce.to_le()) << 32)
         + u128::from(nonce.to_le());
-        //to_le converts to little endian
+    //to_le converts to little endian
 
     let mut bytes = [0u8; 12];
     for i in (0..12).rev() {
@@ -50,7 +49,10 @@ mod tests {
 
     #[test]
     fn test_nonces_to_bytes() {
-        assert_eq!(nonces_to_bytes(42, 12, 0x04030201), [0, 0, 0, 42, 0, 0, 0, 12, 4, 3, 2, 1]);
+        assert_eq!(
+            nonces_to_bytes(42, 12, 0x04030201),
+            [0, 0, 0, 42, 0, 0, 0, 12, 4, 3, 2, 1]
+        );
     }
 
     #[test]

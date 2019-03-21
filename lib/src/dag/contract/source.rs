@@ -1,19 +1,19 @@
 use std::fmt;
 use std::io::Write;
 
+use flate2::write::{GzDecoder, GzEncoder};
 use flate2::Compression;
-use flate2::write::{GzEncoder, GzDecoder};
 
-use wasmi::{Module, Error as WasmError};
+use wasmi::{Error as WasmError, Module};
 
 use serde::{
-    ser::{self, Serialize, Serializer, SerializeStruct},
-    de::{self, Deserialize, Deserializer, Visitor, SeqAccess, MapAccess, Unexpected}
+    de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Unexpected, Visitor},
+    ser::{self, Serialize, SerializeStruct, Serializer},
 };
 
 #[derive(Clone, PartialEq, Hash, Debug)]
 pub struct ContractSource {
-    code: Vec<u8>
+    code: Vec<u8>,
 }
 
 impl ContractSource {
@@ -38,10 +38,12 @@ impl Serialize for ContractSource {
         let mut state = serializer.serialize_struct("ContractSource", 1)?;
         // Compress and serialize code
         let mut e = GzEncoder::new(Vec::new(), Compression::best());
-        e.write_all(&self.code).map_err(|_| { ser::Error::custom("Failed to compress code") })?;
-        let bytes = e.finish().map_err(|_| { ser::Error::custom("Failed to compress code") })?;
-        state.serialize_field("code",
-            &base64::encode_config(&bytes, base64::URL_SAFE))?;
+        e.write_all(&self.code)
+            .map_err(|_| ser::Error::custom("Failed to compress code"))?;
+        let bytes = e
+            .finish()
+            .map_err(|_| ser::Error::custom("Failed to compress code"))?;
+        state.serialize_field("code", &base64::encode_config(&bytes, base64::URL_SAFE))?;
         state.end()
     }
 }
@@ -55,7 +57,7 @@ impl<'de> Deserialize<'de> for ContractSource {
         #[derive(Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
-            Code
+            Code,
         }
 
         struct ContractSourceVisitor;
@@ -71,13 +73,22 @@ impl<'de> Deserialize<'de> for ContractSource {
             where
                 V: SeqAccess<'de>,
             {
-                let bytes = base64::decode_config(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(0, &self))?, base64::URL_SAFE)
-                    .map_err(|_| { de::Error::invalid_value(Unexpected::Str(&"code"), &"valid base64 string")})?;
+                let bytes = base64::decode_config(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(0, &self))?,
+                    base64::URL_SAFE,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(Unexpected::Str(&"code"), &"valid base64 string")
+                })?;
 
                 let mut decoder = GzDecoder::new(Vec::new());
-                decoder.write_all(&bytes[..]).map_err(|_| { de::Error::custom("Failed to decompress code") })?;
-                let code = decoder.finish().map_err(|_| { de::Error::custom("Failed to decompress code") })?;
+                decoder
+                    .write_all(&bytes[..])
+                    .map_err(|_| de::Error::custom("Failed to decompress code"))?;
+                let code = decoder
+                    .finish()
+                    .map_err(|_| de::Error::custom("Failed to decompress code"))?;
 
                 Ok(ContractSource::new(&code))
             }
@@ -95,15 +106,25 @@ impl<'de> Deserialize<'de> for ContractSource {
                                 return Err(de::Error::duplicate_field("code"));
                             }
                             let bytes = base64::decode_config(
-                                &map.next_value::<String>()?, base64::URL_SAFE)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"code"), &"valid base64 string")})?;
+                                &map.next_value::<String>()?,
+                                base64::URL_SAFE,
+                            )
+                            .map_err(|_| {
+                                de::Error::invalid_value(
+                                    Unexpected::Str(&"code"),
+                                    &"valid base64 string",
+                                )
+                            })?;
 
-                                let mut decoder = GzDecoder::new(Vec::new());
-                                decoder.write_all(&bytes[..])
-                                    .map_err(|_| { de::Error::custom("Failed to decompress code") })?;
-                                code = Some(decoder.finish()
-                                    .map_err(|_| { de::Error::custom("Failed to decompress code") })?);
+                            let mut decoder = GzDecoder::new(Vec::new());
+                            decoder
+                                .write_all(&bytes[..])
+                                .map_err(|_| de::Error::custom("Failed to decompress code"))?;
+                            code = Some(
+                                decoder
+                                    .finish()
+                                    .map_err(|_| de::Error::custom("Failed to decompress code"))?,
+                            );
                         }
                     }
                 }
@@ -114,9 +135,7 @@ impl<'de> Deserialize<'de> for ContractSource {
             }
         }
 
-        const FIELDS: &[&str] = &[
-            "code",
-        ];
+        const FIELDS: &[&str] = &["code"];
         deserializer.deserialize_struct("ContractSource", FIELDS, ContractSourceVisitor)
     }
 }

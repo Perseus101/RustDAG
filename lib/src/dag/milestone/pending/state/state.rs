@@ -1,19 +1,14 @@
 use dag::{
+    milestone::pending::{MilestoneSignature, PendingMilestone, _MilestoneErrorTag},
     transaction::Transaction,
-    milestone::pending::{
-        PendingMilestone,
-        MilestoneSignature,
-        _MilestoneErrorTag
-    }
 };
 
 #[derive(Clone)]
 pub enum StateUpdate {
     Chain(Transaction),
-    Sign(MilestoneSignature)
+    Sign(MilestoneSignature),
 }
 
 pub trait PendingMilestoneState {
-    fn next(self, event: &StateUpdate)
-            -> Result<PendingMilestone, _MilestoneErrorTag>;
+    fn next(self, event: &StateUpdate) -> Result<PendingMilestone, _MilestoneErrorTag>;
 }

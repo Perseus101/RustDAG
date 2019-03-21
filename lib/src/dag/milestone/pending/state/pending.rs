@@ -1,18 +1,14 @@
 use dag::{
     milestone::{
+        pending::{MilestoneError, PendingMilestone, _MilestoneErrorTag},
         Milestone,
-        pending::{
-            PendingMilestone,
-            MilestoneError,
-            _MilestoneErrorTag
-        }
     },
-    transaction::Transaction
+    transaction::Transaction,
 };
 
 use super::{
-    SigningState,
     state::{PendingMilestoneState, StateUpdate},
+    SigningState,
 };
 
 /// Structure for representing a transaction in the DAG search tree
@@ -36,7 +32,7 @@ enum MilestoneTreeNode {
     /// Transaction with known children
     Node(Box<MilestoneChainData>),
     /// Transaction that occurs after the previous milestone
-    Leaf(u64)
+    Leaf(u64),
 }
 
 impl MilestoneTreeNode {
@@ -56,8 +52,12 @@ impl MilestoneTreeNode {
         }
     }
 
-    fn update(&mut self, hash: u64, new_data: &MilestoneChainData, milestone: &Milestone)
-            -> Result<Option<Vec<(u64, u64)>>, MilestoneError> {
+    fn update(
+        &mut self,
+        hash: u64,
+        new_data: &MilestoneChainData,
+        milestone: &Milestone,
+    ) -> Result<Option<Vec<(u64, u64)>>, MilestoneError> {
         let mut replace_node: Option<MilestoneTreeNode> = None;
         match self {
             MilestoneTreeNode::Header(_hash) => {
@@ -67,40 +67,36 @@ impl MilestoneTreeNode {
                     if new_data.timestamp <= milestone.get_timestamp() {
                         // Milestone isn't on this chain
                         replace_node = Some(MilestoneTreeNode::Leaf(hash));
-                    }
-                    else {
+                    } else {
                         replace_node = Some(MilestoneTreeNode::create(new_data));
                     }
                 }
-            },
+            }
             MilestoneTreeNode::Node(child_node) => {
                 match child_node._insert(hash, new_data, milestone) {
                     Err(MilestoneError::DuplicateChain) => {
                         return Err(MilestoneError::DuplicateChain);
-                    },
-                    Ok(val) => { return Ok(val) },
+                    }
+                    Ok(val) => return Ok(val),
                     _ => {}
                 }
-            },
-            MilestoneTreeNode::Leaf(_) => {},
+            }
+            MilestoneTreeNode::Leaf(_) => {}
         }
 
         if let Some(new_node) = replace_node {
             *self = new_node;
             let prev_hash = milestone.get_hash();
             return if new_data.branch.get_hash() == prev_hash
-                    || new_data.trunk.get_hash() == prev_hash {
+                || new_data.trunk.get_hash() == prev_hash
+            {
                 // Pending state complete, return data for signing state
-                Ok(Some(vec![
-                    (hash, new_data.contract),
-                ]))
-            }
-            else {
+                Ok(Some(vec![(hash, new_data.contract)]))
+            } else {
                 // Node placed, return to pending state
                 Ok(None)
-            }
-        }
-        else {
+            };
+        } else {
             Err(MilestoneError::StaleChain)
         }
     }
@@ -124,16 +120,23 @@ impl MilestoneChainData {
     /// complete, so this function returns data for the signing state
     ///
     /// If there is an error, returns MilestoneError describing what went wrong
-    fn insert(&mut self, transaction: &Transaction, milestone: &Milestone)
-            -> Result<Option<Vec<(u64, u64)>>, MilestoneError> {
+    fn insert(
+        &mut self,
+        transaction: &Transaction,
+        milestone: &Milestone,
+    ) -> Result<Option<Vec<(u64, u64)>>, MilestoneError> {
         let hash = transaction.get_hash();
         let new_data = MilestoneChainData::new(transaction);
         self._insert(hash, &new_data, milestone)
     }
 
     /// Helper function for insert
-    fn _insert(&mut self, hash: u64, new_data: &MilestoneChainData, milestone: &Milestone)
-            -> Result<Option<Vec<(u64, u64)>>, MilestoneError> {
+    fn _insert(
+        &mut self,
+        hash: u64,
+        new_data: &MilestoneChainData,
+        milestone: &Milestone,
+    ) -> Result<Option<Vec<(u64, u64)>>, MilestoneError> {
         if self.hash == hash {
             return Err(MilestoneError::DuplicateChain);
         }
@@ -141,26 +144,18 @@ impl MilestoneChainData {
             Ok(Some(mut vec)) => {
                 vec.push((self.hash, self.contract));
                 return Ok(Some(vec));
-            },
-            Ok(None) => {
-                return Ok(None)
-            },
-            Err(MilestoneError::DuplicateChain) => {
-                return Err(MilestoneError::DuplicateChain)
-            },
+            }
+            Ok(None) => return Ok(None),
+            Err(MilestoneError::DuplicateChain) => return Err(MilestoneError::DuplicateChain),
             _ => {}
         }
         match self.trunk.update(hash, new_data, milestone) {
             Ok(Some(mut vec)) => {
                 vec.push((self.hash, self.contract));
                 return Ok(Some(vec));
-            },
-            Ok(None) => {
-                return Ok(None)
-            },
-            Err(MilestoneError::DuplicateChain) => {
-                return Err(MilestoneError::DuplicateChain)
-            },
+            }
+            Ok(None) => return Ok(None),
+            Err(MilestoneError::DuplicateChain) => return Err(MilestoneError::DuplicateChain),
             _ => {}
         }
 
@@ -184,28 +179,28 @@ impl PendingState {
         PendingState {
             head: MilestoneChainData::new(&transaction),
             transaction,
-            previous_milestone
+            previous_milestone,
         }
     }
 }
 
 impl PendingMilestoneState for PendingState {
-    fn next(mut self, event: &StateUpdate)
-            -> Result<PendingMilestone, _MilestoneErrorTag> {
+    fn next(mut self, event: &StateUpdate) -> Result<PendingMilestone, _MilestoneErrorTag> {
         match event {
             StateUpdate::Chain(transaction) => {
                 match self.head.insert(transaction, &self.previous_milestone) {
-                    Ok(Some(chain)) => {
-                        Ok(PendingMilestone::Signing(SigningState::new(self.transaction,
-                            self.previous_milestone.get_hash(),chain)))
-                    },
-                    Ok(None) => {
-                        Ok(PendingMilestone::Pending(self))
-                    },
-                    Err(err) => Err(err.convert(PendingMilestone::Pending(self)))
+                    Ok(Some(chain)) => Ok(PendingMilestone::Signing(SigningState::new(
+                        self.transaction,
+                        self.previous_milestone.get_hash(),
+                        chain,
+                    ))),
+                    Ok(None) => Ok(PendingMilestone::Pending(self)),
+                    Err(err) => Err(err.convert(PendingMilestone::Pending(self))),
                 }
-            },
-            StateUpdate::Sign(_) => Err(_MilestoneErrorTag::StaleSignature(PendingMilestone::Pending(self)))
+            }
+            StateUpdate::Sign(_) => Err(_MilestoneErrorTag::StaleSignature(
+                PendingMilestone::Pending(self),
+            )),
         }
     }
 }
@@ -220,11 +215,20 @@ impl PendingState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dag::transaction::data::TransactionData;
     use dag::milestone::pending::MilestoneSignature;
+    use dag::transaction::data::TransactionData;
 
     fn create_transaction(branch: u64, trunk: u64, contract: u64) -> Transaction {
-        Transaction::new(branch, trunk, Vec::new(), contract, 0, 0, 0, TransactionData::Genesis)
+        Transaction::new(
+            branch,
+            trunk,
+            Vec::new(),
+            contract,
+            0,
+            0,
+            0,
+            TransactionData::Genesis,
+        )
     }
 
     #[test]
@@ -240,30 +244,39 @@ mod tests {
         let transaction = create_transaction(0, trunk_transaction.get_hash(), 1);
         // Unrelated transaction for testing
         let unrelated_transaction = create_transaction(1, hash, 2);
-        assert_ne!(unrelated_transaction.get_hash(), trunk_transaction.get_hash());
+        assert_ne!(
+            unrelated_transaction.get_hash(),
+            trunk_transaction.get_hash()
+        );
 
         let pending = PendingState::new(transaction.clone(), previous_milestone);
 
         // Transaction chain incoming
-        match pending.clone().next(&StateUpdate::Chain(unrelated_transaction)) {
+        match pending
+            .clone()
+            .next(&StateUpdate::Chain(unrelated_transaction))
+        {
             Err(_MilestoneErrorTag::StaleChain(PendingMilestone::Pending(state))) => {
                 assert_eq!(state.transaction, pending.transaction);
-            },
+            }
             Err(err) => panic!("Unexpected error while adding chain: {:?}", err),
             Ok(_) => panic!("Expected error"),
         }
 
         match pending.clone().next(&StateUpdate::Chain(trunk_transaction)) {
-            Ok(PendingMilestone::Signing(_)) => {},
+            Ok(PendingMilestone::Signing(_)) => {}
             Ok(_) => panic!("Pending milestone did not transition to signing state"),
-            Err(err) => panic!("Unexpected error while adding chain: {:?}", err)
+            Err(err) => panic!("Unexpected error while adding chain: {:?}", err),
         }
 
         // Signature incoming
-        match pending.clone().next(&StateUpdate::Sign(MilestoneSignature::new(hash, 0, 0))) {
+        match pending
+            .clone()
+            .next(&StateUpdate::Sign(MilestoneSignature::new(hash, 0, 0)))
+        {
             Err(_MilestoneErrorTag::StaleSignature(PendingMilestone::Pending(state))) => {
                 assert_eq!(state.transaction, pending.transaction);
-            },
+            }
             Err(err) => panic!("Unexpected error while adding chain: {:?}", err),
             Ok(_) => panic!("Expected error"),
         }

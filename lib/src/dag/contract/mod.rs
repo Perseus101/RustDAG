@@ -1,6 +1,6 @@
+pub mod error;
 pub mod source;
 pub mod state;
-pub mod error;
 
 #[allow(clippy::module_inception)]
 mod contract;

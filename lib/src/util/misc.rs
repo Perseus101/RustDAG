@@ -13,9 +13,10 @@ pub fn u32_as_hex_string(val: u32) -> String {
 /// Get time since epoch
 pub fn epoch_time() -> u64 {
     let start = SystemTime::now();
-    let epoch_duration = start.duration_since(UNIX_EPOCH).expect("Negative time delta");
-    epoch_duration.as_secs() * 1000 +
-        u64::from(epoch_duration.subsec_nanos()) / 1_000_000
+    let epoch_duration = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Negative time delta");
+    epoch_duration.as_secs() * 1000 + u64::from(epoch_duration.subsec_nanos()) / 1_000_000
 }
 
 #[cfg(test)]
@@ -41,8 +42,8 @@ mod tests {
 
     #[test]
     fn test_epoch_time() {
-        use std::time::Duration;
         use std::thread;
+        use std::time::Duration;
 
         let epoch_timestamp = epoch_time();
         assert!(epoch_timestamp > 0);

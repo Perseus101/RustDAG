@@ -1,16 +1,16 @@
 #![allow(clippy::derive_hash_xor_eq)]
 
-use std::hash::{Hash,Hasher};
+use std::hash::{Hash, Hasher};
 
 use ordered_float::OrderedFloat;
 
-use wasmi::{RuntimeValue, ModuleInstance, ModuleRef};
+use wasmi::{ModuleInstance, ModuleRef, RuntimeValue};
 
-use dag::storage::mpt::{MerklePatriciaTree, NodeUpdates, temp_map::MPTTempMap};
+use dag::storage::mpt::{temp_map::MPTTempMap, MerklePatriciaTree, NodeUpdates};
 
-use super::source::ContractSource;
 use super::error::ContractError;
 use super::resolver::get_imports_builder;
+use super::source::ContractSource;
 use super::state::{ContractState, ContractStateStorage};
 
 /// Represents the values that can be passed to a contract
@@ -70,13 +70,13 @@ pub struct Contract {
 }
 
 impl Contract {
-    pub fn new<'a, M: ContractStateStorage>(src: ContractSource, id: u64,
-            storage: &'a MerklePatriciaTree<ContractValue, M>, root: u64)
-            -> Result<(Self, NodeUpdates<ContractValue>), ContractError> {
-        let contract = Contract {
-            src,
-            id
-        };
+    pub fn new<'a, M: ContractStateStorage>(
+        src: ContractSource,
+        id: u64,
+        storage: &'a MerklePatriciaTree<ContractValue, M>,
+        root: u64,
+    ) -> Result<(Self, NodeUpdates<ContractValue>), ContractError> {
+        let contract = Contract { src, id };
 
         let (_, updates) = contract.exec("init", &Vec::new(), storage, root)?;
 
@@ -84,10 +84,7 @@ impl Contract {
     }
 
     pub fn no_init(src: ContractSource, id: u64) -> Self {
-        Contract {
-            src,
-            id
-        }
+        Contract { src, id }
     }
 
     fn get_module(&self) -> Result<ModuleRef, ContractError> {
@@ -95,41 +92,65 @@ impl Contract {
         Ok(ModuleInstance::new(&self.src.get_wasm_module()?, &imports)?.assert_no_start())
     }
 
-    fn build_state<'a, M: ContractStateStorage>(&self, module: &'a ModuleRef,
-            storage: &'a MerklePatriciaTree<ContractValue, M>, root: u64)
-            -> Result<ContractState<'a, M>, ContractError> {
-        Ok(ContractState::new(module,
-            MerklePatriciaTree::new(MPTTempMap::new(storage)), self.id, root))
+    fn build_state<'a, M: ContractStateStorage>(
+        &self,
+        module: &'a ModuleRef,
+        storage: &'a MerklePatriciaTree<ContractValue, M>,
+        root: u64,
+    ) -> Result<ContractState<'a, M>, ContractError> {
+        Ok(ContractState::new(
+            module,
+            MerklePatriciaTree::new(MPTTempMap::new(storage)),
+            self.id,
+            root,
+        ))
     }
 
     /// Execute the contract function
-    pub fn exec<'a, M: ContractStateStorage>(&self, func_name: &str, args: &[ContractValue],
-            storage: &'a MerklePatriciaTree<ContractValue, M>, root: u64)
-            -> Result<(Option<ContractValue>, NodeUpdates<ContractValue>), ContractError> {
+    pub fn exec<'a, M: ContractStateStorage>(
+        &self,
+        func_name: &str,
+        args: &[ContractValue],
+        storage: &'a MerklePatriciaTree<ContractValue, M>,
+        root: u64,
+    ) -> Result<(Option<ContractValue>, NodeUpdates<ContractValue>), ContractError> {
         let module = self.get_module()?;
         let mut temp_state = self.build_state(&module, storage, root)?;
         let return_value = self.exec_from_state(func_name, args, &mut temp_state)?;
         let updates = temp_state.updates()?;
-        return Ok((return_value, updates))
+        return Ok((return_value, updates));
     }
 
     /// Execute the contract function
     ///
     /// Ignores node updates and only returns the value returned by the function call
-    pub fn exec_const<'a, M: ContractStateStorage>(&self, func_name: &str, args: &[ContractValue],
-            storage: &'a MerklePatriciaTree<ContractValue, M>, root: u64)
-            -> Result<Option<ContractValue>, ContractError> {
+    pub fn exec_const<'a, M: ContractStateStorage>(
+        &self,
+        func_name: &str,
+        args: &[ContractValue],
+        storage: &'a MerklePatriciaTree<ContractValue, M>,
+        root: u64,
+    ) -> Result<Option<ContractValue>, ContractError> {
         let module = self.get_module()?;
         let mut temp_state = self.build_state(&module, storage, root)?;
         self.exec_from_state(func_name, args, &mut temp_state)
     }
 
-    fn exec_from_state<M: ContractStateStorage>(&self,
-            func_name: &str, args: &[ContractValue], state: &mut ContractState<M>)
-            -> Result<Option<ContractValue>, ContractError> {
-        let return_value = state.exec(func_name, &args.iter()
-            .map(|x| RuntimeValue::from(x.clone())).collect::<Vec<_>>())?
-            .map(|value| { ContractValue::from(value) });
+    fn exec_from_state<M: ContractStateStorage>(
+        &self,
+        func_name: &str,
+        args: &[ContractValue],
+        state: &mut ContractState<M>,
+    ) -> Result<Option<ContractValue>, ContractError> {
+        let return_value = state
+            .exec(
+                func_name,
+                &args
+                    .iter()
+                    .map(|x| RuntimeValue::from(x.clone()))
+                    .collect::<Vec<_>>(),
+            )?
+            .map(|value| ContractValue::from(value));
         Ok(return_value)
     }
 }
@@ -137,10 +158,10 @@ impl Contract {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::collections::HashMap;
     use std::fs::File;
     use std::io::Read;
-    use std::collections::HashMap;
+    use std::path::PathBuf;
 
     use dag::contract::state::{get_key, get_mapping_key};
     use dag::storage::map::OOB;
@@ -153,11 +174,13 @@ mod tests {
         let filename = d.to_str().unwrap().to_string();
         let mut file = File::open(filename).expect("Could not open test file");
         let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);
-        file.read_to_end(&mut buf).expect("Could not read test file");
+        file.read_to_end(&mut buf)
+            .expect("Could not read test file");
 
         let mut storage = MerklePatriciaTree::<ContractValue, _>::new(HashMap::new());
         let mut root = storage.default_root();
-        let (contract, updates) = Contract::new(ContractSource::new(&buf), 0, &storage, root).expect("Failed to create contract");
+        let (contract, updates) = Contract::new(ContractSource::new(&buf), 0, &storage, root)
+            .expect("Failed to create contract");
         assert!(storage.commit_set(updates).is_ok());
 
         let values = vec![
@@ -167,7 +190,9 @@ mod tests {
             ContractValue::F64(4f64),
         ];
         for (i, val) in values.iter().enumerate() {
-            root = storage.set(root, get_key(i as u32, 0), val.clone()).unwrap();
+            root = storage
+                .set(root, get_key(i as u32, 0), val.clone())
+                .unwrap();
         }
 
         let mapping_key = get_mapping_key(4, 0, 0);
@@ -176,21 +201,51 @@ mod tests {
 
         // Assert the values were set correctly
         for (i, val) in values.iter().enumerate() {
-            assert_eq!(Ok(OOB::Borrowed(val)), storage.get(root, get_key(i as u32, 0)));
+            assert_eq!(
+                Ok(OOB::Borrowed(val)),
+                storage.get(root, get_key(i as u32, 0))
+            );
         }
-        assert_eq!(Ok(OOB::Borrowed(&mapping_val)), storage.get(root, mapping_key));
+        assert_eq!(
+            Ok(OOB::Borrowed(&mapping_val)),
+            storage.get(root, mapping_key)
+        );
 
         // Now, assert the correct values also come out of WASM
-        assert_eq!(Some(ContractValue::U32(1)),
-            contract.exec_const("get_u32", &[ContractValue::U32(0)], &storage, root).unwrap());
-        assert_eq!(Some(ContractValue::U64(2)),
-            contract.exec_const("get_u64", &[ContractValue::U32(1)], &storage, root).unwrap());
-        assert_eq!(Some(ContractValue::F32(3f32)),
-            contract.exec_const("get_f32", &[ContractValue::U32(2)], &storage, root).unwrap());
-        assert_eq!(Some(ContractValue::F64(4f64)),
-            contract.exec_const("get_f64", &[ContractValue::U32(3)], &storage, root).unwrap());
-        assert_eq!(Some(ContractValue::U64(5)),
-            contract.exec_const("get_mapping", &[ContractValue::U32(4),
-                ContractValue::U64(0)], &storage, root).unwrap());
+        assert_eq!(
+            Some(ContractValue::U32(1)),
+            contract
+                .exec_const("get_u32", &[ContractValue::U32(0)], &storage, root)
+                .unwrap()
+        );
+        assert_eq!(
+            Some(ContractValue::U64(2)),
+            contract
+                .exec_const("get_u64", &[ContractValue::U32(1)], &storage, root)
+                .unwrap()
+        );
+        assert_eq!(
+            Some(ContractValue::F32(3f32)),
+            contract
+                .exec_const("get_f32", &[ContractValue::U32(2)], &storage, root)
+                .unwrap()
+        );
+        assert_eq!(
+            Some(ContractValue::F64(4f64)),
+            contract
+                .exec_const("get_f64", &[ContractValue::U32(3)], &storage, root)
+                .unwrap()
+        );
+        assert_eq!(
+            Some(ContractValue::U64(5)),
+            contract
+                .exec_const(
+                    "get_mapping",
+                    &[ContractValue::U32(4), ContractValue::U64(0)],
+                    &storage,
+                    root
+                )
+                .unwrap()
+        );
     }
 }

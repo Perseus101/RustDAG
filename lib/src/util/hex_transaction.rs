@@ -1,15 +1,15 @@
 use std::fmt;
-use std::{u64, u32};
 use std::num::ParseIntError;
+use std::{u32, u64};
 
 use serde::{
-    ser::{Serialize, Serializer, SerializeStruct},
-    de::{self, Deserialize, Deserializer, Visitor, SeqAccess, MapAccess, Unexpected}
+    de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Unexpected, Visitor},
+    ser::{Serialize, SerializeStruct, Serializer},
 };
 
-use super::{u64_as_hex_string, u32_as_hex_string};
+use super::{u32_as_hex_string, u64_as_hex_string};
 
-use dag::transaction::{Transaction, data::TransactionData};
+use dag::transaction::{data::TransactionData, Transaction};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct HexEncodedTransaction {
@@ -44,9 +44,18 @@ impl From<Transaction> for HexEncodedTransaction {
 
 impl From<HexEncodedTransaction> for Transaction {
     fn from(hex: HexEncodedTransaction) -> Transaction {
-        Transaction::raw(hex.branch_transaction, hex.trunk_transaction,
-            hex.ref_transactions, hex.contract, hex.timestamp, hex.nonce,
-            hex.root, hex.address, hex.signature, hex.data)
+        Transaction::raw(
+            hex.branch_transaction,
+            hex.trunk_transaction,
+            hex.ref_transactions,
+            hex.contract,
+            hex.timestamp,
+            hex.nonce,
+            hex.root,
+            hex.address,
+            hex.signature,
+            hex.data,
+        )
     }
 }
 
@@ -59,16 +68,32 @@ impl Serialize for HexEncodedTransaction {
         let mut state = serializer.serialize_struct("HexEncodedTransaction", 9)?;
         // Serialize fields
         // Convert integer fields to hex strings
-        state.serialize_field("branch_transaction", &u64_as_hex_string(self.branch_transaction))?;
-        state.serialize_field("trunk_transaction", &u64_as_hex_string(self.trunk_transaction))?;
-        let refs: Vec<String> = self.ref_transactions.iter().map(|val| u64_as_hex_string(*val)).collect();
+        state.serialize_field(
+            "branch_transaction",
+            &u64_as_hex_string(self.branch_transaction),
+        )?;
+        state.serialize_field(
+            "trunk_transaction",
+            &u64_as_hex_string(self.trunk_transaction),
+        )?;
+        let refs: Vec<String> = self
+            .ref_transactions
+            .iter()
+            .map(|val| u64_as_hex_string(*val))
+            .collect();
         state.serialize_field("ref_transactions", &refs)?;
         state.serialize_field("contract", &u64_as_hex_string(self.contract))?;
         state.serialize_field("timestamp", &u64_as_hex_string(self.timestamp))?;
         state.serialize_field("nonce", &u32_as_hex_string(self.nonce))?;
         state.serialize_field("root", &u64_as_hex_string(self.root))?;
-        state.serialize_field("address", &base64::encode_config(&self.address, base64::URL_SAFE))?;
-        state.serialize_field("signature", &base64::encode_config(&self.signature, base64::URL_SAFE))?;
+        state.serialize_field(
+            "address",
+            &base64::encode_config(&self.address, base64::URL_SAFE),
+        )?;
+        state.serialize_field(
+            "signature",
+            &base64::encode_config(&self.signature, base64::URL_SAFE),
+        )?;
         state.serialize_field("data", &self.data)?;
         state.end()
     }
@@ -108,54 +133,109 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
             where
                 V: SeqAccess<'de>,
             {
-                let branch_transaction = u64::from_str_radix(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?, 16)
-                    .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"branch_transaction"), &"valid hex string")})?;
+                let branch_transaction = u64::from_str_radix(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(4, &self))?,
+                    16,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(
+                        Unexpected::Str(&"branch_transaction"),
+                        &"valid hex string",
+                    )
+                })?;
 
-                let trunk_transaction = u64::from_str_radix(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?, 16)
-                    .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"trunk_transaction"), &"valid hex string")})?;
+                let trunk_transaction = u64::from_str_radix(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(4, &self))?,
+                    16,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(
+                        Unexpected::Str(&"trunk_transaction"),
+                        &"valid hex string",
+                    )
+                })?;
 
-                let ref_transaction_results: Vec<Result<u64, ParseIntError>> = seq.next_element::<Vec<String>>()?
-                    .ok_or_else(|| de::Error::invalid_length(2, &self))?.iter()
-                        .map(|val| {u64::from_str_radix(&val, 16)}).collect();
-                let mut ref_transactions: Vec<u64> = Vec::with_capacity(ref_transaction_results.len());
+                let ref_transaction_results: Vec<Result<u64, ParseIntError>> = seq
+                    .next_element::<Vec<String>>()?
+                    .ok_or_else(|| de::Error::invalid_length(2, &self))?
+                    .iter()
+                    .map(|val| u64::from_str_radix(&val, 16))
+                    .collect();
+                let mut ref_transactions: Vec<u64> =
+                    Vec::with_capacity(ref_transaction_results.len());
                 for item in ref_transaction_results.into_iter() {
                     match item {
-                        Err(_) => return Err(de::Error::invalid_value(
-                            Unexpected::Str("ref_transactions"), &"valid hex string")),
-                        Ok(valid_item) => ref_transactions.push(valid_item)
+                        Err(_) => {
+                            return Err(de::Error::invalid_value(
+                                Unexpected::Str("ref_transactions"),
+                                &"valid hex string",
+                            ))
+                        }
+                        Ok(valid_item) => ref_transactions.push(valid_item),
                     }
                 }
 
-                let contract = u64::from_str_radix(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?, 16)
-                    .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"contract"), &"valid hex string")})?;
+                let contract = u64::from_str_radix(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(4, &self))?,
+                    16,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(Unexpected::Str(&"contract"), &"valid hex string")
+                })?;
 
-                let timestamp = u64::from_str_radix(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(4, &self))?, 16)
-                    .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"timestamp"), &"valid hex string")})?;
+                let timestamp = u64::from_str_radix(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(4, &self))?,
+                    16,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(Unexpected::Str(&"timestamp"), &"valid hex string")
+                })?;
 
-                let nonce = u32::from_str_radix(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(5, &self))?, 16)
-                    .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"nonce"), &"valid hex string")})?;
+                let nonce = u32::from_str_radix(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(5, &self))?,
+                    16,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(Unexpected::Str(&"nonce"), &"valid hex string")
+                })?;
 
-                let root = u64::from_str_radix(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(6, &self))?, 16)
-                    .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"root"), &"valid hex string")})?;
+                let root = u64::from_str_radix(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(6, &self))?,
+                    16,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(Unexpected::Str(&"root"), &"valid hex string")
+                })?;
 
-                let address = base64::decode_config(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(7, &self))?, base64::URL_SAFE)
-                    .map_err(|_| { de::Error::invalid_value(Unexpected::Str(&"address"), &"valid base64 string")})?;
+                let address = base64::decode_config(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(7, &self))?,
+                    base64::URL_SAFE,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(Unexpected::Str(&"address"), &"valid base64 string")
+                })?;
 
-                let signature = base64::decode_config(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(8, &self))?, base64::URL_SAFE)
-                    .map_err(|_| { de::Error::invalid_value(Unexpected::Str(&"signature"), &"valid base64 string")})?;
+                let signature = base64::decode_config(
+                    &seq.next_element::<String>()?
+                        .ok_or_else(|| de::Error::invalid_length(8, &self))?,
+                    base64::URL_SAFE,
+                )
+                .map_err(|_| {
+                    de::Error::invalid_value(Unexpected::Str(&"signature"), &"valid base64 string")
+                })?;
 
-                let data = seq.next_element()?
+                let data = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(9, &self))?;
 
-                Ok(HexEncodedTransaction{
+                Ok(HexEncodedTransaction {
                     branch_transaction,
                     trunk_transaction,
                     ref_transactions,
@@ -165,7 +245,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                     root,
                     address,
                     signature,
-                    data
+                    data,
                 })
             }
 
@@ -190,103 +270,164 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                             if branch_transaction.is_some() {
                                 return Err(de::Error::duplicate_field("branch_transaction"));
                             }
-                            branch_transaction = Some(u64::from_str_radix(
-                                &map.next_value::<String>()?, 16)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"branch_transaction"), &"valid hex string")})?);
-                        },
+                            branch_transaction = Some(
+                                u64::from_str_radix(&map.next_value::<String>()?, 16).map_err(
+                                    |_| {
+                                        de::Error::invalid_value(
+                                            Unexpected::Str(&"branch_transaction"),
+                                            &"valid hex string",
+                                        )
+                                    },
+                                )?,
+                            );
+                        }
                         Field::Trunk_Transaction => {
                             if trunk_transaction.is_some() {
                                 return Err(de::Error::duplicate_field("trunk_transaction"));
                             }
-                            trunk_transaction = Some(u64::from_str_radix(
-                                &map.next_value::<String>()?, 16)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"trunk_transaction"), &"valid hex string")})?);
-                        },
+                            trunk_transaction = Some(
+                                u64::from_str_radix(&map.next_value::<String>()?, 16).map_err(
+                                    |_| {
+                                        de::Error::invalid_value(
+                                            Unexpected::Str(&"trunk_transaction"),
+                                            &"valid hex string",
+                                        )
+                                    },
+                                )?,
+                            );
+                        }
                         Field::Ref_Transactions => {
                             if ref_transactions.is_some() {
                                 return Err(de::Error::duplicate_field("ref_transactions"));
                             }
-                            let parsed: Vec<Result<u64, ParseIntError>> =
-                                    map.next_value::<Vec<String>>()?.iter()
-                                    .map(|val| { u64::from_str_radix(&val, 16) }).collect();
+                            let parsed: Vec<Result<u64, ParseIntError>> = map
+                                .next_value::<Vec<String>>()?
+                                .iter()
+                                .map(|val| u64::from_str_radix(&val, 16))
+                                .collect();
                             let mut val: Vec<u64> = Vec::with_capacity(parsed.len());
                             for item in parsed.into_iter() {
                                 match item {
-                                    Err(_) => return Err(de::Error::invalid_value(
-                                        Unexpected::Str(&"ref_transactions"), &"valid hex string")),
-                                    Ok(valid_item) => val.push(valid_item)
+                                    Err(_) => {
+                                        return Err(de::Error::invalid_value(
+                                            Unexpected::Str(&"ref_transactions"),
+                                            &"valid hex string",
+                                        ))
+                                    }
+                                    Ok(valid_item) => val.push(valid_item),
                                 }
                             }
                             ref_transactions = Some(val);
-                        },
+                        }
                         Field::Contract => {
                             if contract.is_some() {
                                 return Err(de::Error::duplicate_field("contract"));
                             }
-                            contract = Some(u64::from_str_radix(
-                                &map.next_value::<String>()?, 16)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"contract"), &"valid hex string")})?);
-                        },
+                            contract = Some(
+                                u64::from_str_radix(&map.next_value::<String>()?, 16).map_err(
+                                    |_| {
+                                        de::Error::invalid_value(
+                                            Unexpected::Str(&"contract"),
+                                            &"valid hex string",
+                                        )
+                                    },
+                                )?,
+                            );
+                        }
                         Field::Timestamp => {
                             if timestamp.is_some() {
                                 return Err(de::Error::duplicate_field("timestamp"));
                             }
-                            timestamp = Some(u64::from_str_radix(
-                                &map.next_value::<String>()?, 16)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"timestamp"), &"valid hex string")})?);
-                        },
+                            timestamp = Some(
+                                u64::from_str_radix(&map.next_value::<String>()?, 16).map_err(
+                                    |_| {
+                                        de::Error::invalid_value(
+                                            Unexpected::Str(&"timestamp"),
+                                            &"valid hex string",
+                                        )
+                                    },
+                                )?,
+                            );
+                        }
                         Field::Nonce => {
                             if nonce.is_some() {
                                 return Err(de::Error::duplicate_field("nonce"));
                             }
-                            nonce = Some(u32::from_str_radix(
-                                &map.next_value::<String>()?, 16)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"nonce"), &"valid hex string")})?);
-                        },
+                            nonce = Some(
+                                u32::from_str_radix(&map.next_value::<String>()?, 16).map_err(
+                                    |_| {
+                                        de::Error::invalid_value(
+                                            Unexpected::Str(&"nonce"),
+                                            &"valid hex string",
+                                        )
+                                    },
+                                )?,
+                            );
+                        }
                         Field::Root => {
                             if root.is_some() {
                                 return Err(de::Error::duplicate_field("root"));
                             }
-                            root = Some(u64::from_str_radix(
-                                &map.next_value::<String>()?, 16)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"root"), &"valid hex string")})?);
-                        },
+                            root = Some(
+                                u64::from_str_radix(&map.next_value::<String>()?, 16).map_err(
+                                    |_| {
+                                        de::Error::invalid_value(
+                                            Unexpected::Str(&"root"),
+                                            &"valid hex string",
+                                        )
+                                    },
+                                )?,
+                            );
+                        }
                         Field::Address => {
                             if address.is_some() {
                                 return Err(de::Error::duplicate_field("address"));
                             }
-                            address = Some(base64::decode_config(
-                                &map.next_value::<String>()?, base64::URL_SAFE)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"address"), &"valid base64 string")})?);
-                        },
+                            address = Some(
+                                base64::decode_config(
+                                    &map.next_value::<String>()?,
+                                    base64::URL_SAFE,
+                                )
+                                .map_err(|_| {
+                                    de::Error::invalid_value(
+                                        Unexpected::Str(&"address"),
+                                        &"valid base64 string",
+                                    )
+                                })?,
+                            );
+                        }
                         Field::Signature => {
                             if signature.is_some() {
                                 return Err(de::Error::duplicate_field("signature"));
                             }
-                            signature = Some(base64::decode_config(
-                                &map.next_value::<String>()?, base64::URL_SAFE)
-                                .map_err(|_| {de::Error::invalid_value(
-                                    Unexpected::Str(&"signature"), &"valid base64 string")})?);
-                        },
+                            signature = Some(
+                                base64::decode_config(
+                                    &map.next_value::<String>()?,
+                                    base64::URL_SAFE,
+                                )
+                                .map_err(|_| {
+                                    de::Error::invalid_value(
+                                        Unexpected::Str(&"signature"),
+                                        &"valid base64 string",
+                                    )
+                                })?,
+                            );
+                        }
                         Field::Data => {
                             if data.is_some() {
                                 return Err(de::Error::duplicate_field("data"));
                             }
                             data = Some(map.next_value()?);
-                        },
+                        }
                     }
                 }
 
-                let branch_transaction = branch_transaction.ok_or_else(|| de::Error::missing_field("branch_transaction"))?;
-                let trunk_transaction = trunk_transaction.ok_or_else(|| de::Error::missing_field("trunk_transaction"))?;
-                let ref_transactions = ref_transactions.ok_or_else(|| de::Error::missing_field("ref_transactions"))?;
+                let branch_transaction = branch_transaction
+                    .ok_or_else(|| de::Error::missing_field("branch_transaction"))?;
+                let trunk_transaction = trunk_transaction
+                    .ok_or_else(|| de::Error::missing_field("trunk_transaction"))?;
+                let ref_transactions =
+                    ref_transactions.ok_or_else(|| de::Error::missing_field("ref_transactions"))?;
                 let contract = contract.ok_or_else(|| de::Error::missing_field("contract"))?;
                 let timestamp = timestamp.ok_or_else(|| de::Error::missing_field("timestamp"))?;
                 let nonce = nonce.ok_or_else(|| de::Error::missing_field("nonce"))?;
@@ -295,7 +436,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                 let signature = signature.ok_or_else(|| de::Error::missing_field("signature"))?;
                 let data = data.ok_or_else(|| de::Error::missing_field("data"))?;
 
-                Ok(HexEncodedTransaction{
+                Ok(HexEncodedTransaction {
                     branch_transaction,
                     trunk_transaction,
                     ref_transactions,
@@ -305,7 +446,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                     root,
                     address,
                     signature,
-                    data
+                    data,
                 })
             }
         }
@@ -329,8 +470,8 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
 mod tests {
     use super::*;
 
-    use security::ring::digest::SHA512_256;
     use security::keys::PrivateKey;
+    use security::ring::digest::SHA512_256;
 
     #[test]
     fn test_convert() {
@@ -351,7 +492,8 @@ mod tests {
 
     #[test]
     fn test_serialize() {
-        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
+        let transaction: HexEncodedTransaction =
+            Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
         let json_value = json!({
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
@@ -369,7 +511,8 @@ mod tests {
 
     #[test]
     fn test_deserialize() {
-        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
+        let transaction: HexEncodedTransaction =
+            Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
         let json_value = json!({
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
@@ -388,16 +531,21 @@ mod tests {
     #[test]
     fn test_serialize_deserialize() {
         // Check the transaction is identical after serializing and deserializing
-        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
+        let transaction: HexEncodedTransaction =
+            Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
         let json_value = serde_json::to_value(transaction.clone()).unwrap();
         assert_eq!(transaction, serde_json::from_value(json_value).unwrap());
 
         // Check a signed transaction is identical after serializing and deserializing
-        let mut signed_transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 0, TransactionData::Genesis);
+        let mut signed_transaction =
+            Transaction::new(0, 1, vec![2], 3, 4, 5, 0, TransactionData::Genesis);
         let mut key = PrivateKey::new(&SHA512_256);
         signed_transaction.sign(&mut key);
         let hex_signed_transaction: HexEncodedTransaction = signed_transaction.into();
         let signed_json_value = serde_json::to_value(hex_signed_transaction.clone()).unwrap();
-        assert_eq!(hex_signed_transaction, serde_json::from_value(signed_json_value).unwrap());
+        assert_eq!(
+            hex_signed_transaction,
+            serde_json::from_value(signed_json_value).unwrap()
+        );
     }
 }

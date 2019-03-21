@@ -16,7 +16,7 @@ impl MilestoneSignature {
             milestone,
             contract,
             pub_key: MilestonePubKey {},
-            next_key
+            next_key,
         }
     }
 

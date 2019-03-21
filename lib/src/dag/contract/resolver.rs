@@ -1,6 +1,6 @@
 use wasmi::{
-    Error as InterpreterError, ModuleImportResolver, ImportsBuilder,
-    FuncRef, FuncInstance, Signature, ValueType
+    Error as InterpreterError, FuncInstance, FuncRef, ImportsBuilder, ModuleImportResolver,
+    Signature, ValueType,
 };
 
 pub const GET_INT32_INDEX: usize = 0;
@@ -47,38 +47,28 @@ impl ModuleImportResolver for Resolver {
                 GET_FLOAT64_INDEX,
             ),
             "__ofc__get_mapping" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32, ValueType::I64][..],
-                Some(ValueType::I64)), GET_MAPPING_INDEX,
+                Signature::new(&[ValueType::I32, ValueType::I64][..], Some(ValueType::I64)),
+                GET_MAPPING_INDEX,
             ),
 
             "__ofc__set_u32" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::I32][..], None
-                ),
+                Signature::new(&[ValueType::I32, ValueType::I32][..], None),
                 SET_INT32_INDEX,
             ),
             "__ofc__set_u64" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::I64][..], None
-                ),
+                Signature::new(&[ValueType::I32, ValueType::I64][..], None),
                 SET_INT64_INDEX,
             ),
             "__ofc__set_f32" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::F32][..], None
-                ),
+                Signature::new(&[ValueType::I32, ValueType::F32][..], None),
                 SET_FLOAT32_INDEX,
             ),
             "__ofc__set_f64" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::F64][..], None
-                ),
+                Signature::new(&[ValueType::I32, ValueType::F64][..], None),
                 SET_FLOAT64_INDEX,
             ),
             "__ofc__set_mapping" => FuncInstance::alloc_host(
-                Signature::new(
-                    &[ValueType::I32, ValueType::I64, ValueType::I64][..], None
-                ),
+                Signature::new(&[ValueType::I32, ValueType::I64, ValueType::I64][..], None),
                 SET_MAPPING_INDEX,
             ),
             _ => {

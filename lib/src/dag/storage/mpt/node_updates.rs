@@ -22,10 +22,7 @@ impl<T: MPTData> IntoIterator for NodeUpdates<T> {
 
 impl<T: MPTData> NodeUpdates<T> {
     pub fn new(root: Node<T>, branches: Vec<Node<T>>) -> Self {
-        NodeUpdates {
-            root,
-            branches,
-        }
+        NodeUpdates { root, branches }
     }
 
     pub fn get_root_hash(&self) -> u64 {
@@ -38,8 +35,8 @@ use super::node;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use self::node::PointerNode;
+    use super::*;
 
     #[test]
     fn test_mpt_node_updates() {
@@ -74,7 +71,21 @@ mod tests {
 
         let new_updates = NodeUpdates::new(new_root.clone(), vec![branch1, branch2]);
 
-        assert_eq!(new_updates.clone().into_iter().collect::<Vec<Node<u64>>>().len(), 3);
-        assert_eq!(updates.clone().into_iter().collect::<Vec<Node<u64>>>().len(), 2);
+        assert_eq!(
+            new_updates
+                .clone()
+                .into_iter()
+                .collect::<Vec<Node<u64>>>()
+                .len(),
+            3
+        );
+        assert_eq!(
+            updates
+                .clone()
+                .into_iter()
+                .collect::<Vec<Node<u64>>>()
+                .len(),
+            2
+        );
     }
 }
