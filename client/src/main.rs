@@ -1,78 +1,93 @@
-use security::ring::digest::SHA512_256;
+use std::fs::File;
+use std::io::Read;
 
 extern crate rustdag_lib;
 
 use rustdag_lib::{util, security, dag};
 
 use dag::transaction::{Transaction, data::TransactionData};
-use dag::contract::Contract;
-use dag::contract::source::{ContractSource, function::ContractFunction, op::ContractOp};
+use dag::contract::ContractValue;
+use dag::contract::source::ContractSource;
 
 use util::peer::Peer;
 use util::types::TransactionStatus;
+use security::ring::digest::SHA512_256;
 use security::hash::proof::proof_of_work;
 use security::keys::PrivateKey;
 
 fn main() {
     let server = Peer::new(String::from("http://localhost:4200"));
-
-    // Generate contract
-    let contract_src = ContractSource::new(vec![
-        ContractFunction::new(vec![ContractOp::AddConst((1, 0, 0))], 0, 0)
-    ], 1);
+    let blockdag = server.clone().into_remote_blockdag();
+    // Load contract
+    let mut file = File::open("test.wasm").expect("Could not open test file");
+    let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);
+    file.read_to_end(&mut buf).expect("Could not read test file");
+    let contract_src = ContractSource::new(&buf);
 
     let mut contract_id = 0;
+    let mut trunk_nonce = 0;
+    let mut root = blockdag.get_mpt_default_root();
     let tip_hashes = server.get_tips();
-    if let Some(trunk) = server.get_transaction(tip_hashes.trunk_hash) {
-        if let Some(branch) = server.get_transaction(tip_hashes.branch_hash) {
-            let nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
+    if let Ok(trunk) = server.get_transaction(tip_hashes.trunk_hash) {
+        if let Ok(branch) = server.get_transaction(tip_hashes.branch_hash) {
+            trunk_nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
 
             let mut pk = PrivateKey::new(&SHA512_256);
 
             let mut transaction = Transaction::create(
-                tip_hashes.branch_hash, tip_hashes.trunk_hash, vec![],
-                0, nonce, TransactionData::GenContract(contract_src.clone())
+                tip_hashes.branch_hash, tip_hashes.trunk_hash, vec![], 0,
+                trunk_nonce, root,
+                TransactionData::GenContract(contract_src.clone())
             );
 
             transaction.sign(&mut pk);
 
             contract_id = transaction.get_hash();
 
-            if server.post_transaction(&transaction) == TransactionStatus::Rejected {
+            root = blockdag.try_add_transaction(&transaction).unwrap()
+                .get_storage_root().unwrap();
+
+            if let Ok(TransactionStatus::Rejected(_)) = server.post_transaction(&transaction) {
                 panic!("Contract rejected");
             }
         }
     }
 
-    // Execute the contract repeatedly
-    let mut contract: Contract = From::from(contract_src);
-
-    loop {
+    let mut trunk_hash = contract_id;
+    // Execute the contract grant function
+    // let mut contract: Contract = Contract::new(contract_src, contract_id).expect("Failed to create contract");
+    for data in [
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(1), ContractValue::U64(101)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(2), ContractValue::U64(102)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(3), ContractValue::U64(103)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(4), ContractValue::U64(104)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(5), ContractValue::U64(105)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(6), ContractValue::U64(106)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(7), ContractValue::U64(107)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(8), ContractValue::U64(108)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(9), ContractValue::U64(109)]),
+            TransactionData::ExecContract("grant".into(), vec![ContractValue::U64(10), ContractValue::U64(1000)]),
+            ].iter() {
         let tip_hashes = server.get_tips();
-        if let Some(trunk) = server.get_transaction(tip_hashes.trunk_hash) {
-            if let Some(branch) = server.get_transaction(tip_hashes.branch_hash) {
-                let nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
+        if let Ok(branch) = server.get_transaction(tip_hashes.branch_hash) {
+            trunk_nonce = proof_of_work(trunk_nonce, branch.get_nonce());
+            let mut pk = PrivateKey::new(&SHA512_256);
+            let mut transaction = Transaction::create(
+                tip_hashes.branch_hash, trunk_hash, vec![],
+                contract_id, trunk_nonce, root, data.clone()
+            );
+            transaction.sign(&mut pk);
+            trunk_hash = transaction.get_hash();
+            root = blockdag.try_add_transaction(&transaction).unwrap()
+                .get_storage_root().unwrap();
+            print!("Transaction {}: ", transaction.get_hash());
 
-                if let Ok(result) = contract.exec(0, vec![]) {
-                    if let Err(err) = contract.apply(result.clone()) {
-                        println!("Error running contract: {:?}", err);
-                        continue;
-                    }
-                    let mut pk = PrivateKey::new(&SHA512_256);
-
-                    let mut transaction = Transaction::create(
-                        tip_hashes.branch_hash, tip_hashes.trunk_hash, vec![],
-                        contract_id, nonce, TransactionData::ExecContract(result)
-                    );
-
-                    transaction.sign(&mut pk);
-
-                    println!("Transaction {}: {}", transaction.get_hash(), contract.get_state()[0]);
-                    if server.post_transaction(&transaction) == TransactionStatus::Milestone {
-                        println!("Milestone");
-                    }
-                }
+            match server.post_transaction(&transaction) {
+                Ok(TransactionStatus::Milestone) => println!("Milestone"),
+                Ok(TransactionStatus::Rejected(message)) => println!("Rejected: {:?}", message),
+                data => { println!("{:?}", data) }
             }
         }
     }
+
 }

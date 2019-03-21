@@ -77,7 +77,7 @@ mod tests {
     use dag::milestone::pending::MilestoneSignature;
 
     fn create_transaction(branch: u64, trunk: u64, contract: u64) -> Transaction {
-        Transaction::new(branch, trunk, Vec::new(), contract, 0, 0, TransactionData::Genesis)
+        Transaction::new(branch, trunk, Vec::new(), contract, 0, 0, 0, TransactionData::Genesis)
     }
 
     #[test]

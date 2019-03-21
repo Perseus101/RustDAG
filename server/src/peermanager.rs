@@ -5,6 +5,7 @@ pub struct PeerManager {
 }
 
 impl PeerManager {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> PeerManager {
         PeerManager {
             peers: Vec::new(),

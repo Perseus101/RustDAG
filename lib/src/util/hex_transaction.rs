@@ -19,6 +19,7 @@ pub struct HexEncodedTransaction {
     contract: u64,
     timestamp: u64,
     nonce: u32,
+    root: u64,
     address: Vec<u8>,
     signature: Vec<u8>,
     data: TransactionData,
@@ -33,6 +34,7 @@ impl From<Transaction> for HexEncodedTransaction {
             contract: transaction.get_contract(),
             timestamp: transaction.get_timestamp(),
             nonce: transaction.get_nonce(),
+            root: transaction.get_root(),
             address: transaction.get_address().to_vec(),
             signature: transaction.get_signature().to_vec(),
             data: transaction.get_data().clone(),
@@ -44,7 +46,7 @@ impl From<HexEncodedTransaction> for Transaction {
     fn from(hex: HexEncodedTransaction) -> Transaction {
         Transaction::raw(hex.branch_transaction, hex.trunk_transaction,
             hex.ref_transactions, hex.contract, hex.timestamp, hex.nonce,
-            hex.address, hex.signature, hex.data)
+            hex.root, hex.address, hex.signature, hex.data)
     }
 }
 
@@ -64,6 +66,7 @@ impl Serialize for HexEncodedTransaction {
         state.serialize_field("contract", &u64_as_hex_string(self.contract))?;
         state.serialize_field("timestamp", &u64_as_hex_string(self.timestamp))?;
         state.serialize_field("nonce", &u32_as_hex_string(self.nonce))?;
+        state.serialize_field("root", &u64_as_hex_string(self.root))?;
         state.serialize_field("address", &base64::encode_config(&self.address, base64::URL_SAFE))?;
         state.serialize_field("signature", &base64::encode_config(&self.signature, base64::URL_SAFE))?;
         state.serialize_field("data", &self.data)?;
@@ -86,6 +89,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
             Contract,
             Timestamp,
             Nonce,
+            Root,
             Address,
             Signature,
             Data,
@@ -136,16 +140,20 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                     .ok_or_else(|| de::Error::invalid_length(5, &self))?, 16)
                     .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"nonce"), &"valid hex string")})?;
 
+                let root = u64::from_str_radix(&seq.next_element::<String>()?
+                    .ok_or_else(|| de::Error::invalid_length(6, &self))?, 16)
+                    .map_err(|_| {de::Error::invalid_value(Unexpected::Str(&"root"), &"valid hex string")})?;
+
                 let address = base64::decode_config(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(6, &self))?, base64::URL_SAFE)
+                    .ok_or_else(|| de::Error::invalid_length(7, &self))?, base64::URL_SAFE)
                     .map_err(|_| { de::Error::invalid_value(Unexpected::Str(&"address"), &"valid base64 string")})?;
 
                 let signature = base64::decode_config(&seq.next_element::<String>()?
-                    .ok_or_else(|| de::Error::invalid_length(7, &self))?, base64::URL_SAFE)
+                    .ok_or_else(|| de::Error::invalid_length(8, &self))?, base64::URL_SAFE)
                     .map_err(|_| { de::Error::invalid_value(Unexpected::Str(&"signature"), &"valid base64 string")})?;
 
                 let data = seq.next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(8, &self))?;
+                    .ok_or_else(|| de::Error::invalid_length(9, &self))?;
 
                 Ok(HexEncodedTransaction{
                     branch_transaction,
@@ -154,6 +162,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                     contract,
                     timestamp,
                     nonce,
+                    root,
                     address,
                     signature,
                     data
@@ -170,6 +179,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                 let mut contract = None;
                 let mut timestamp = None;
                 let mut nonce = None;
+                let mut root = None;
                 let mut address = None;
                 let mut signature = None;
                 let mut data = None;
@@ -238,6 +248,15 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                                 .map_err(|_| {de::Error::invalid_value(
                                     Unexpected::Str(&"nonce"), &"valid hex string")})?);
                         },
+                        Field::Root => {
+                            if root.is_some() {
+                                return Err(de::Error::duplicate_field("root"));
+                            }
+                            root = Some(u64::from_str_radix(
+                                &map.next_value::<String>()?, 16)
+                                .map_err(|_| {de::Error::invalid_value(
+                                    Unexpected::Str(&"root"), &"valid hex string")})?);
+                        },
                         Field::Address => {
                             if address.is_some() {
                                 return Err(de::Error::duplicate_field("address"));
@@ -271,6 +290,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                 let contract = contract.ok_or_else(|| de::Error::missing_field("contract"))?;
                 let timestamp = timestamp.ok_or_else(|| de::Error::missing_field("timestamp"))?;
                 let nonce = nonce.ok_or_else(|| de::Error::missing_field("nonce"))?;
+                let root = root.ok_or_else(|| de::Error::missing_field("root"))?;
                 let address = address.ok_or_else(|| de::Error::missing_field("address"))?;
                 let signature = signature.ok_or_else(|| de::Error::missing_field("signature"))?;
                 let data = data.ok_or_else(|| de::Error::missing_field("data"))?;
@@ -282,6 +302,7 @@ impl<'de> Deserialize<'de> for HexEncodedTransaction {
                     contract,
                     timestamp,
                     nonce,
+                    root,
                     address,
                     signature,
                     data
@@ -313,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_convert() {
-        let transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis);
+        let transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 0, TransactionData::Genesis);
         let hex: HexEncodedTransaction = transaction.clone().into();
         let converted: Transaction = hex.into();
         assert_eq!(transaction, converted);
@@ -322,6 +343,7 @@ mod tests {
         assert_eq!(transaction.get_ref_hashes(), converted.get_ref_hashes());
         assert_eq!(transaction.get_contract(), converted.get_contract());
         assert_eq!(transaction.get_nonce(), converted.get_nonce());
+        assert_eq!(transaction.get_root(), converted.get_root());
         assert_eq!(transaction.get_address(), converted.get_address());
         assert_eq!(transaction.get_signature(), converted.get_signature());
         assert_eq!(transaction.get_data(), converted.get_data());
@@ -329,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_serialize() {
-        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis).into();
+        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
         let json_value = json!({
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
@@ -337,6 +359,7 @@ mod tests {
             "contract": "0000000000000003",
             "timestamp": "0000000000000004",
             "nonce": "00000005",
+            "root": "0000000000000006",
             "address": "",
             "signature": base64::encode_config(&vec![0; 8192], base64::URL_SAFE),
             "data": TransactionData::Genesis
@@ -346,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_deserialize() {
-        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis).into();
+        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
         let json_value = json!({
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
@@ -354,6 +377,7 @@ mod tests {
             "contract": "0000000000000003",
             "timestamp": "0000000000000004",
             "nonce": "00000005",
+            "root": "0000000000000006",
             "address": "",
             "signature": base64::encode_config(&vec![0; 8192], base64::URL_SAFE),
             "data": TransactionData::Genesis
@@ -364,12 +388,12 @@ mod tests {
     #[test]
     fn test_serialize_deserialize() {
         // Check the transaction is identical after serializing and deserializing
-        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis).into();
+        let transaction: HexEncodedTransaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 6, TransactionData::Genesis).into();
         let json_value = serde_json::to_value(transaction.clone()).unwrap();
         assert_eq!(transaction, serde_json::from_value(json_value).unwrap());
 
         // Check a signed transaction is identical after serializing and deserializing
-        let mut signed_transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, TransactionData::Genesis);
+        let mut signed_transaction = Transaction::new(0, 1, vec![2], 3, 4, 5, 0, TransactionData::Genesis);
         let mut key = PrivateKey::new(&SHA512_256);
         signed_transaction.sign(&mut key);
         let hex_signed_transaction: HexEncodedTransaction = signed_transaction.into();

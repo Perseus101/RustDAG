@@ -1,9 +1,9 @@
-use dag::contract::source::ContractSource;
-use dag::contract::result::ContractResult;
+use dag::contract::{ContractValue, source::ContractSource};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Hash, Debug)]
 pub enum TransactionData {
     Genesis,
     GenContract(ContractSource),
-    ExecContract(ContractResult),
+    ExecContract(String, Vec<ContractValue>),
+    Empty,
 }

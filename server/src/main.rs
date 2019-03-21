@@ -32,6 +32,8 @@ fn main() {
     rocket::ignite()
         .mount("/", routes![get_tips, new_peer])
         .mount("/transaction", controllers::transaction::transaction_routes())
+        .mount("/contract", controllers::contract::contract_routes())
+        .mount("/node", controllers::node::node_routes())
         .manage(DAGManager::default())
         .launch();
 }

@@ -1,8 +1,9 @@
 pub mod source;
 pub mod state;
-pub mod result;
-pub mod errors;
+pub mod error;
 
 #[allow(clippy::module_inception)]
 mod contract;
-pub use self::contract::Contract;
+mod resolver;
+
+pub use self::contract::{Contract, ContractValue};
