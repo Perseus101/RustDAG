@@ -166,7 +166,7 @@ mod tests {
     fn test_exec_contract() {
         // Load the example contract file
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("resources/test/contracts/full_api_test.wasm");
+        d.push("resources/test/contracts/api_test.wasm");
         let filename = d.to_str().unwrap().to_string();
         let mut file = File::open(filename).expect("Could not open test file");
         let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);

@@ -2,5 +2,6 @@
 members = [
   "lib",
   "client",
-  "server"
+  "server",
+  "wasm_api"
 ]
