@@ -1,0 +1,7 @@
+[package]
+name = "rustdag_wasm_api"
+version = "0.1.0"
+authors = ["Colin Moore <colin@moore.one>"]
+edition = "2018"
+
+[dependencies]

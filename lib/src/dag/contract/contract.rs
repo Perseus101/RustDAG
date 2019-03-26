@@ -83,10 +83,6 @@ impl Contract {
         Ok((contract, updates))
     }
 
-    pub fn no_init(src: ContractSource, id: u64) -> Self {
-        Contract { src, id }
-    }
-
     fn get_module(&self) -> Result<ModuleRef, ContractError> {
         let imports = get_imports_builder();
         Ok(ModuleInstance::new(&self.src.get_wasm_module()?, &imports)?.assert_no_start())
@@ -170,7 +166,7 @@ mod tests {
     fn test_exec_contract() {
         // Load the example contract file
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("resources/test/contracts/full_api_test.wasm");
+        d.push("resources/test/contracts/api_test.wasm");
         let filename = d.to_str().unwrap().to_string();
         let mut file = File::open(filename).expect("Could not open test file");
         let mut buf: Vec<u8> = Vec::with_capacity(file.metadata().unwrap().len() as usize);
@@ -181,6 +177,7 @@ mod tests {
         let mut root = storage.default_root();
         let (contract, updates) = Contract::new(ContractSource::new(&buf), 0, &storage, root)
             .expect("Failed to create contract");
+        root = updates.get_root_hash();
         assert!(storage.commit_set(updates).is_ok());
 
         let values = vec![
@@ -189,15 +186,8 @@ mod tests {
             ContractValue::F32(3f32),
             ContractValue::F64(4f64),
         ];
-        for (i, val) in values.iter().enumerate() {
-            root = storage
-                .set(root, get_key(i as u32, 0), val.clone())
-                .unwrap();
-        }
-
         let mapping_key = get_mapping_key(4, 0, 0);
         let mapping_val = ContractValue::U64(5);
-        root = storage.set(root, mapping_key, mapping_val.clone()).unwrap();
 
         // Assert the values were set correctly
         for (i, val) in values.iter().enumerate() {

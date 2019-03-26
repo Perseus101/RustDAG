@@ -270,7 +270,7 @@ mod tests {
 
     fn load_api_test_module_instance() -> ModuleRef {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("resources/test/contracts/raw_api_test.wasm");
+        d.push("resources/test/contracts/api_test.wasm");
         let module = load_module_from_file(d.to_str().unwrap().to_string());
 
         let mut imports = ImportsBuilder::new();

@@ -30,44 +30,44 @@ impl ModuleImportResolver for Resolver {
         _signature: &Signature,
     ) -> Result<FuncRef, InterpreterError> {
         let func_ref = match field_name {
-            "__ofc__get_u32" => FuncInstance::alloc_host(
+            "api_get_u32" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32][..], Some(ValueType::I32)),
                 GET_INT32_INDEX,
             ),
-            "__ofc__get_u64" => FuncInstance::alloc_host(
+            "api_get_u64" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32][..], Some(ValueType::I64)),
                 GET_INT64_INDEX,
             ),
-            "__ofc__get_f32" => FuncInstance::alloc_host(
+            "api_get_f32" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32][..], Some(ValueType::F32)),
                 GET_FLOAT32_INDEX,
             ),
-            "__ofc__get_f64" => FuncInstance::alloc_host(
+            "api_get_f64" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32][..], Some(ValueType::F64)),
                 GET_FLOAT64_INDEX,
             ),
-            "__ofc__get_mapping" => FuncInstance::alloc_host(
+            "api_get_mapping" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32, ValueType::I64][..], Some(ValueType::I64)),
                 GET_MAPPING_INDEX,
             ),
 
-            "__ofc__set_u32" => FuncInstance::alloc_host(
+            "api_set_u32" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32, ValueType::I32][..], None),
                 SET_INT32_INDEX,
             ),
-            "__ofc__set_u64" => FuncInstance::alloc_host(
+            "api_set_u64" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32, ValueType::I64][..], None),
                 SET_INT64_INDEX,
             ),
-            "__ofc__set_f32" => FuncInstance::alloc_host(
+            "api_set_f32" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32, ValueType::F32][..], None),
                 SET_FLOAT32_INDEX,
             ),
-            "__ofc__set_f64" => FuncInstance::alloc_host(
+            "api_set_f64" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32, ValueType::F64][..], None),
                 SET_FLOAT64_INDEX,
             ),
-            "__ofc__set_mapping" => FuncInstance::alloc_host(
+            "api_set_mapping" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32, ValueType::I64, ValueType::I64][..], None),
                 SET_MAPPING_INDEX,
             ),
