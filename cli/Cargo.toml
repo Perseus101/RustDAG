@@ -1,0 +1,11 @@
+[package]
+name = "cli"
+version = "0.1.0"
+authors = ["Colin Moore <colin@moore.one>"]
+edition = "2018"
+
+[dependencies]
+clap = "2.32.0"
+
+[dependencies.rustdag-lib]
+path = "../lib"
