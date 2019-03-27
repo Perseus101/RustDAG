@@ -3,15 +3,14 @@ use std::collections::HashMap;
 use rand::{thread_rng, Rng};
 
 use dag::contract::{state::ContractStateStorage, Contract, ContractValue};
+use dag::error::BlockDAGError;
 use dag::milestone::pending::{MilestoneSignature, MilestoneTracker};
 use dag::milestone::Milestone;
 use dag::storage::map::{Map, OOB};
-use dag::storage::mpt::{node::Node, MerklePatriciaTree};
+use dag::storage::mpt::{node::Node, MerklePatriciaTree, NodeUpdates};
 use dag::transaction::{
     data::TransactionData, error::TransactionError, updates::TransactionUpdates, Transaction,
 };
-
-use super::incomplete_chain::IncompleteChain;
 
 use security::hash::proof::valid_proof;
 
@@ -248,7 +247,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
     pub fn verify_milestone(
         &self,
         transaction: Transaction,
-    ) -> Result<Vec<Transaction>, IncompleteChain> {
+    ) -> Result<Vec<Transaction>, BlockDAGError> {
         let prev_milestone = self.milestones.get_head_milestone();
         let mut transaction_chain: Vec<Transaction> = Vec::new();
         let mut missing_hashes: Vec<u64> = Vec::new();
@@ -273,7 +272,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         if transaction_found {
             Ok(transaction_chain)
         } else {
-            Err(IncompleteChain::new(missing_hashes))
+            Err(BlockDAGError::IncompleteChain(missing_hashes))
         }
     }
 

@@ -3,7 +3,7 @@ use clap::{App, Arg, SubCommand};
 
 extern crate rustdag_lib;
 
-mod deploy;
+mod server;
 
 fn main() {
     let matches = App::new("RustDAG CLI")
@@ -15,7 +15,7 @@ fn main() {
                 .short("s")
                 .long("server")
                 .help("Set server address")
-                .takes_value(true)
+                .takes_value(true),
         )
         .subcommand(
             SubCommand::with_name("deploy")
@@ -53,26 +53,32 @@ fn main() {
                         .help("Arguments to contract function")
                         .min_values(1)
                         .index(2),
-                )
+                ),
         )
         .get_matches();
 
-    let server_url = String::from(matches.value_of("server").unwrap_or("http://localhost:4200"));
+    let server = server::Server::new(
+        matches
+            .value_of("server")
+            .unwrap_or("http://localhost:4200"),
+    );
 
     if let Some(matches) = matches.subcommand_matches("deploy") {
-        let filename = String::from(matches.value_of("INPUT").unwrap());
-        let contract_id = deploy::deploy_contract(server_url, filename);
+        let filename = matches.value_of("INPUT").unwrap();
+        let contract_id = server.deploy_contract(filename);
         println!("Contract ID: {}", contract_id);
-    }
-
-    if let Some(matches) = matches.subcommand_matches("run") {
-        let contract_id = matches.value_of("contract").unwrap()
-            .parse::<u64>().expect("Contract must be a valid integer");
+    } else if let Some(matches) = matches.subcommand_matches("run") {
+        let contract_id = matches
+            .value_of("contract")
+            .unwrap()
+            .parse::<u64>()
+            .expect("Contract must be a valid integer");
         let function_name = matches.value_of("FUNCTION").unwrap();
         let args: Vec<_> = matches.values_of("FN_ARGS").unwrap().collect();
-
-        println!("Contract: {}", contract_id);
-        println!("Function: {}", function_name);
-        println!("Arguments: {:?}", args);
+        server.run_contract(
+            contract_id,
+            function_name.into(),
+            args.into_iter().map(|x| x.into()).collect::<Vec<String>>(),
+        );
     }
 }
