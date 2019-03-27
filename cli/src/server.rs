@@ -8,7 +8,10 @@ use rustdag_lib::{
         transaction::{data::TransactionData, Transaction},
     },
     security::{hash::proof::proof_of_work, keys::PrivateKey, ring::digest::SHA512_256},
-    util::peer::{types::TransactionStatus, ContractPeer, MPTNodePeer, Peer, TransactionPeer},
+    util::{
+        types::TransactionStatus,
+        peer::{ContractPeer, MPTNodePeer, Peer, TransactionPeer}
+    },
 };
 
 pub struct Server {
@@ -39,9 +42,9 @@ impl Server {
             .expect("Could not read test file");
         let contract_src = ContractSource::new(&buf);
 
-        let tip_hashes = self.server.get_tips();
-        let trunk = self.server.get_transaction(tip_hashes.trunk_hash).unwrap();
-        let branch = self.server.get_transaction(tip_hashes.branch_hash).unwrap();
+        let tip_hashes = self.peer.get_tips();
+        let trunk = self.peer.get_transaction(tip_hashes.trunk_hash).unwrap();
+        let branch = self.peer.get_transaction(tip_hashes.branch_hash).unwrap();
         let trunk_nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
 
         let mut pk = PrivateKey::new(&SHA512_256);
@@ -60,7 +63,7 @@ impl Server {
 
         let contract_id = transaction.get_hash();
 
-        if let Ok(TransactionStatus::Rejected(msg)) = server.post_transaction(&transaction) {
+        if let Ok(TransactionStatus::Rejected(msg)) = self.peer.post_transaction(&transaction) {
             panic!("Contract rejected: {}", msg);
         }
         contract_id
