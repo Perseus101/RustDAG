@@ -1,7 +1,7 @@
 use std::hash::{Hash, Hasher};
 
 use security::hash::hasher::Sha3Hasher;
-use security::keys::eddsa::{EdDSAKeyPair, get_public_key, verify};
+use security::keys::eddsa::{get_public_key, verify, EdDSAKeyPair};
 
 use super::data::TransactionData;
 use super::header::TransactionHeader;
@@ -16,14 +16,11 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(
-        header: TransactionHeader,
-        data: TransactionData,
-    ) -> Self {
+    pub fn new(header: TransactionHeader, data: TransactionData) -> Self {
         Transaction {
             header,
             data,
-            signature: TransactionSignature::Unsigned
+            signature: TransactionSignature::Unsigned,
         }
     }
 
@@ -106,9 +103,10 @@ impl Transaction {
         let bytes = &s.finish_bytes();
         match self.signature {
             TransactionSignature::Unsigned => false,
-            TransactionSignature::EdDSA { ref public_key, ref signature } => {
-                verify(public_key, bytes, signature)
-            }
+            TransactionSignature::EdDSA {
+                ref public_key,
+                ref signature,
+            } => verify(public_key, bytes, signature),
         }
     }
 }
@@ -122,8 +120,7 @@ impl Hash for Transaction {
 
 impl PartialEq<Transaction> for Transaction {
     fn eq(&self, other: &Transaction) -> bool {
-        self.header == other.header
-            && self.data == other.data
+        self.header == other.header && self.data == other.data
     }
 }
 
@@ -139,15 +136,12 @@ mod tests {
 
         let transaction = Transaction::new(
             TransactionHeader::new(branch_hash, trunk_hash, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         assert_eq!(transaction.get_branch_hash(), branch_hash);
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
-        assert_eq!(
-            [branch_hash, trunk_hash],
-            transaction.get_all_refs()
-        );
+        assert_eq!([branch_hash, trunk_hash], transaction.get_all_refs());
         assert_eq!(0, transaction.get_nonce());
         assert_eq!(9766645081009868391, transaction.get_hash());
     }
@@ -157,7 +151,7 @@ mod tests {
         let key = new_key_pair().unwrap();
         let mut transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         transaction.sign_eddsa(&key);
         assert!(transaction.verify());
@@ -167,7 +161,7 @@ mod tests {
     fn test_serialize() {
         let transaction = Transaction::new(
             TransactionHeader::new(0, 1, 2, 3, 4, 5),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let json_value = json!({
             "branch_transaction": 0,
@@ -187,7 +181,7 @@ mod tests {
     fn test_deserialize() {
         let transaction = Transaction::new(
             TransactionHeader::new(0, 1, 2, 3, 4, 5),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let json_value = json!({
             "branch_transaction": 0,
@@ -207,7 +201,7 @@ mod tests {
         // Check the transaction is identical after serializing and deserializing
         let transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let json_value = serde_json::to_value(transaction.clone()).unwrap();
         assert_eq!(transaction, serde_json::from_value(json_value).unwrap());
@@ -215,7 +209,7 @@ mod tests {
         // Check a signed transaction is identical after serializing and deserializing
         let mut signed_transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let key = new_key_pair().unwrap();
         signed_transaction.sign_eddsa(&key);

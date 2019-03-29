@@ -2,10 +2,10 @@ use std::cmp::Eq;
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use std::borrow::Borrow;
 use std::error::Error;
 use std::fmt;
 use std::ops::Deref;
-use std::borrow::Borrow;
 
 #[derive(PartialEq, Debug)]
 pub enum MapError {
@@ -61,7 +61,6 @@ impl<'a, T> Borrow<T> for OOB<'a, T> {
         self.inner_ref()
     }
 }
-
 
 impl<'a, T> Deref for OOB<'a, T> {
     type Target = T;

@@ -49,15 +49,11 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
             //TODO: I couldn't find a good way to do this without duplicating the branch arms. Maybe refactor to function?
             node = match node.take().unwrap() {
                 OOB::Owned(Node::BranchNode(pointers)) => {
-                    let hash = pointers
-                        .get_next_hash(k)
-                        .ok_or(MapError::NotFound)?;
+                    let hash = pointers.get_next_hash(k).ok_or(MapError::NotFound)?;
                     Some(self.nodes.get(&hash)?)
                 }
                 OOB::Borrowed(Node::BranchNode(pointers)) => {
-                    let hash = pointers
-                        .get_next_hash(k)
-                        .ok_or(MapError::NotFound)?;
+                    let hash = pointers.get_next_hash(k).ok_or(MapError::NotFound)?;
                     Some(self.nodes.get(&hash)?)
                 }
                 OOB::Owned(Node::LeafNode(value)) => {

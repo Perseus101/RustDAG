@@ -1,61 +1,58 @@
 use dag::transaction::{
-    Transaction,
-    header::TransactionHeader,
-    data::TransactionData,
-    signature::TransactionSignature,
+    data::TransactionData, header::TransactionHeader, signature::TransactionSignature, Transaction,
 };
 
 use super::{u32_as_hex_string, u64_as_hex_string};
 
 mod hex_u32 {
     use super::*;
-    use std::u32;
     use serde::{
-        ser::{Serializer},
-        de::{Deserialize, Deserializer, Error}
+        de::{Deserialize, Deserializer, Error},
+        ser::Serializer,
     };
+    use std::u32;
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn serialize<S>(key: &u32, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
+    where
+        S: Serializer,
     {
         serializer.serialize_str(&u32_as_hex_string(*key))
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<u32, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)
-            .and_then(|string| {
-                u32::from_str_radix(&string, 16)
-                    .map_err(|err| Error::custom(err.to_string()))
-            })
+        String::deserialize(deserializer).and_then(|string| {
+            u32::from_str_radix(&string, 16).map_err(|err| Error::custom(err.to_string()))
+        })
     }
 }
 
 mod hex_u64 {
     use super::*;
-    use std::u64;
     use serde::{
-        ser::{Serializer},
-        de::{Deserialize, Deserializer, Error}
+        de::{Deserialize, Deserializer, Error},
+        ser::Serializer,
     };
+    use std::u64;
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn serialize<S>(key: &u64, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
+    where
+        S: Serializer,
     {
         serializer.serialize_str(&u64_as_hex_string(*key))
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<u64, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)
-            .and_then(|string| {
-                u64::from_str_radix(&string, 16)
-                    .map_err(|err| Error::custom(err.to_string()))
-            })
+        String::deserialize(deserializer).and_then(|string| {
+            u64::from_str_radix(&string, 16).map_err(|err| Error::custom(err.to_string()))
+        })
     }
 }
 
@@ -121,11 +118,7 @@ impl From<Transaction> for HexEncodedTransaction {
 
 impl From<HexEncodedTransaction> for Transaction {
     fn from(hex: HexEncodedTransaction) -> Transaction {
-        Transaction::raw(
-            hex.header.into(),
-            hex.data,
-            hex.signature
-        )
+        Transaction::raw(hex.header.into(), hex.data, hex.signature)
     }
 }
 
@@ -133,12 +126,15 @@ impl From<HexEncodedTransaction> for Transaction {
 mod tests {
     use super::*;
 
-    use security::keys::eddsa::new_key_pair;
     use dag::transaction::header::TransactionHeader;
+    use security::keys::eddsa::new_key_pair;
 
     #[test]
     fn test_convert() {
-        let transaction = Transaction::new(TransactionHeader::new(0, 1, 2, 3, 4, 5), TransactionData::Genesis);
+        let transaction = Transaction::new(
+            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionData::Genesis,
+        );
         let hex: HexEncodedTransaction = transaction.clone().into();
         let converted: Transaction = hex.into();
         assert_eq!(transaction, converted);
@@ -154,11 +150,11 @@ mod tests {
 
     #[test]
     fn test_serialize() {
-        let transaction: HexEncodedTransaction =
-            Transaction::new(
-                TransactionHeader::new(0, 1, 2, 3, 4, 5),
-                TransactionData::Genesis
-            ).into();
+        let transaction: HexEncodedTransaction = Transaction::new(
+            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionData::Genesis,
+        )
+        .into();
         let json_value = json!({
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
@@ -174,12 +170,11 @@ mod tests {
 
     #[test]
     fn test_deserialize() {
-
-        let transaction: HexEncodedTransaction =
-            Transaction::new(
-                TransactionHeader::new(0, 1, 2, 3, 4, 5),
-                TransactionData::Genesis
-            ).into();
+        let transaction: HexEncodedTransaction = Transaction::new(
+            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionData::Genesis,
+        )
+        .into();
         let json_value = json!({
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
@@ -196,14 +191,19 @@ mod tests {
     #[test]
     fn test_serialize_deserialize() {
         // Check the transaction is identical after serializing and deserializing
-        let transaction: HexEncodedTransaction =
-            Transaction::new(TransactionHeader::new(0, 1, 2, 3, 4, 5), TransactionData::Genesis).into();
+        let transaction: HexEncodedTransaction = Transaction::new(
+            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionData::Genesis,
+        )
+        .into();
         let json_value = serde_json::to_value(transaction.clone()).unwrap();
         assert_eq!(transaction, serde_json::from_value(json_value).unwrap());
 
         // Check a signed transaction is identical after serializing and deserializing
-        let mut signed_transaction =
-            Transaction::new(TransactionHeader::new(0, 1, 2, 3, 4, 5), TransactionData::Genesis);
+        let mut signed_transaction = Transaction::new(
+            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionData::Genesis,
+        );
         let key = new_key_pair().unwrap();
         signed_transaction.sign_eddsa(&key);
         let hex_signed_transaction: HexEncodedTransaction = signed_transaction.into();

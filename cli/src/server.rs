@@ -9,8 +9,8 @@ use rustdag_lib::{
     },
     security::hash::proof::proof_of_work,
     util::{
+        peer::{ContractPeer, MPTNodePeer, Peer, TransactionPeer},
         types::TransactionStatus,
-        peer::{ContractPeer, MPTNodePeer, Peer, TransactionPeer}
     },
 };
 
@@ -48,8 +48,15 @@ impl Server {
         let trunk_nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
 
         let mut transaction = Transaction::new(
-            TransactionHeader::new(tip_hashes.branch_hash, tip_hashes.trunk_hash, 0, root, 0, trunk_nonce),
-            TransactionData::GenContract(contract_src)
+            TransactionHeader::new(
+                tip_hashes.branch_hash,
+                tip_hashes.trunk_hash,
+                0,
+                root,
+                0,
+                trunk_nonce,
+            ),
+            TransactionData::GenContract(contract_src),
         );
 
         let pk = rustdag_lib::security::keys::eddsa::new_key_pair().unwrap();

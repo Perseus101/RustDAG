@@ -2,7 +2,7 @@ use std::fmt;
 
 use ring::{
     rand,
-    signature::{Ed25519KeyPair, Signature, ED25519, verify as ring_verify},
+    signature::{verify as ring_verify, Ed25519KeyPair, Signature, ED25519},
 };
 
 use untrusted::Input;
@@ -45,22 +45,20 @@ impl From<Signature> for EdSignature {
         let sig_ref = signature.as_ref();
         let len = sig_ref.len();
         (&mut buffer[..len]).copy_from_slice(sig_ref);
-        EdSignature { data: buffer , len }
+        EdSignature { data: buffer, len }
     }
 }
 
 pub fn new_key_pair() -> Result<EdDSAKeyPair, KeyError> {
     let rng = rand::SystemRandom::new();
     let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rng)?;
-    let key_pair =
-        Ed25519KeyPair::from_pkcs8(untrusted::Input::from(pkcs8_bytes.as_ref()))?;
+    let key_pair = Ed25519KeyPair::from_pkcs8(untrusted::Input::from(pkcs8_bytes.as_ref()))?;
     Ok(key_pair)
 }
 
 pub fn get_public_key(key_pair: &EdDSAKeyPair) -> EdDSAPublicKey {
     let mut buffer = [0u8; ED25519_PUBLIC_KEY_LEN];
-    buffer[..ED25519_PUBLIC_KEY_LEN]
-        .clone_from_slice(key_pair.public_key_bytes());
+    buffer[..ED25519_PUBLIC_KEY_LEN].clone_from_slice(key_pair.public_key_bytes());
     buffer
 }
 
@@ -69,8 +67,9 @@ pub fn verify(public_key: &EdDSAPublicKey, message: &[u8], signature: &EdSignatu
         &ED25519,
         Input::from(public_key),
         Input::from(message),
-        Input::from(signature.as_ref())
-    ).is_ok()
+        Input::from(signature.as_ref()),
+    )
+    .is_ok()
 }
 
 #[cfg(test)]

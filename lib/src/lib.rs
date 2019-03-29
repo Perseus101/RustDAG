@@ -12,9 +12,9 @@ extern crate base64;
 extern crate flate2;
 extern crate ordered_float;
 extern crate rand;
+extern crate replace_with;
 extern crate ring;
 extern crate untrusted;
-extern crate replace_with;
 
 extern crate wasmi;
 

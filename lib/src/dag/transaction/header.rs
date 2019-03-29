@@ -15,7 +15,7 @@ impl TransactionHeader {
         contract: u64,
         root: u64,
         timestamp: u64,
-        nonce: u32
+        nonce: u32,
     ) -> Self {
         TransactionHeader {
             branch_transaction,

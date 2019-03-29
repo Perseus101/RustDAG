@@ -9,11 +9,8 @@ use dag::milestone::Milestone;
 use dag::storage::map::{Map, OOB};
 use dag::storage::mpt::{node::Node, MerklePatriciaTree};
 use dag::transaction::{
-    Transaction,
-    header::TransactionHeader,
-    data::TransactionData,
-    error::TransactionError,
-    updates::TransactionUpdates,
+    data::TransactionData, error::TransactionError, header::TransactionHeader,
+    updates::TransactionUpdates, Transaction,
 };
 
 use security::hash::proof::valid_proof;
@@ -56,7 +53,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
 
         let genesis_transaction = Transaction::new(
             TransactionHeader::new(GENESIS_HASH, GENESIS_HASH, 0, default_root, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let genesis_milestone = Milestone::new(GENESIS_HASH, genesis_transaction.clone());
 
@@ -71,8 +68,15 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
 
         let genesis_transaction_hash = genesis_transaction.get_hash();
         let genesis_branch = Transaction::new(
-            TransactionHeader::new(genesis_transaction_hash, genesis_transaction_hash, 0, default_root, 0, 0),
-            TransactionData::Genesis
+            TransactionHeader::new(
+                genesis_transaction_hash,
+                genesis_transaction_hash,
+                0,
+                default_root,
+                0,
+                0,
+            ),
+            TransactionData::Genesis,
         );
 
         let genesis_branch_hash = genesis_branch.get_hash();
@@ -99,9 +103,11 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         &self,
         transaction: &Transaction,
     ) -> Result<TransactionUpdates, TransactionError> {
-        let trunk = self.get_transaction(transaction.get_trunk_hash())
+        let trunk = self
+            .get_transaction(transaction.get_trunk_hash())
             .ok_or_else(|| TransactionError::Rejected("Trunk transaction not found".into()))?;
-        let branch = self.get_transaction(transaction.get_branch_hash())
+        let branch = self
+            .get_transaction(transaction.get_branch_hash())
             .ok_or_else(|| TransactionError::Rejected("Branch transaction not found".into()))?;
 
         if !valid_proof(
@@ -182,8 +188,11 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         let res = if transaction.get_nonce() > MILESTONE_NONCE_MIN
             && transaction.get_nonce() < MILESTONE_NONCE_MAX
             && self.milestones.new_milestone(transaction.clone())
-        { TransactionStatus::Milestone }
-        else { TransactionStatus::Pending };
+        {
+            TransactionStatus::Milestone
+        } else {
+            TransactionStatus::Pending
+        };
 
         let refs = transaction.get_all_refs();
         self.pending_transactions.set(hash, transaction)?;
@@ -316,7 +325,8 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         for transaction_hash in transaction.get_all_refs().iter() {
             if let Some(pending_transaction) = self.pending_transactions.remove(&transaction_hash) {
                 self.confirm_transactions(&pending_transaction);
-                self.transactions.set(*transaction_hash, pending_transaction);
+                self.transactions
+                    .set(*transaction_hash, pending_transaction);
             }
         }
     }
@@ -426,7 +436,7 @@ mod tests {
     ) -> Transaction {
         let transaction = Transaction::new(
             TransactionHeader::new(branch, trunk, contract, 0, 0, 0),
-            data
+            data,
         );
         dag.force_add_transaction(transaction.clone());
         transaction
@@ -451,7 +461,7 @@ mod tests {
 
         let mut transaction = Transaction::new(
             TransactionHeader::new(BRANCH_HASH, TRUNK_HASH, 0, 0, 0, BASE_NONCE),
-            TransactionData::Empty
+            TransactionData::Empty,
         );
         let key = new_key_pair().unwrap();
         transaction.sign_eddsa(&key);
@@ -469,7 +479,7 @@ mod tests {
 
         let mut bad_transaction = Transaction::new(
             TransactionHeader::new(20, BRANCH_HASH, 0, 0, 0, BASE_NONCE),
-            TransactionData::Empty
+            TransactionData::Empty,
         );
         bad_transaction.sign_eddsa(&key);
         assert_eq!(
@@ -486,7 +496,7 @@ mod tests {
         let prev_milestone = dag.milestones.get_head_milestone();
         let transaction = Transaction::new(
             TransactionHeader::new(TRUNK_HASH, BRANCH_HASH, 0, 0, 0, BASE_NONCE),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         assert!(dag.walk_search(
@@ -497,10 +507,9 @@ mod tests {
             &mut |_| {}
         ));
 
-
         let transaction = Transaction::new(
             TransactionHeader::new(TRUNK_HASH, 0, 0, 0, 0, BASE_NONCE),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         assert!(dag.walk_search(
@@ -513,7 +522,7 @@ mod tests {
 
         let transaction = Transaction::new(
             TransactionHeader::new(0, BRANCH_HASH, 0, 0, 0, BASE_NONCE),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         assert!(dag.walk_search(
@@ -526,7 +535,7 @@ mod tests {
 
         let transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, BASE_NONCE),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         assert!(!dag.walk_search(
@@ -574,7 +583,7 @@ mod tests {
 
         let mut transaction = Transaction::new(
             TransactionHeader::new(TRUNK_HASH, BRANCH_HASH, 0, 0, 0, BASE_NONCE),
-            data
+            data,
         );
 
         let key = new_key_pair().unwrap();
@@ -613,7 +622,7 @@ mod tests {
             let data = TransactionData::GenContract(ContractSource::new(&buf));
             let mut transaction = Transaction::new(
                 TransactionHeader::new(TRUNK_HASH, BRANCH_HASH, 0, root, 0, BASE_NONCE),
-                data
+                data,
             );
             transaction.sign_eddsa(&key);
             assert!(transaction.verify());
@@ -642,12 +651,13 @@ mod tests {
 
             let mut transaction = Transaction::new(
                 TransactionHeader::new(branch_hash, trunk_hash, contract_id, root, 0, nonce),
-                data
+                data,
             );
             transaction.sign_eddsa(&key);
             assert!(transaction.verify());
 
-            let updates = dag.try_add_transaction(&transaction)
+            let updates = dag
+                .try_add_transaction(&transaction)
                 .expect("Failed to execute contract");
 
             let new_root = updates.get_storage_root().unwrap();

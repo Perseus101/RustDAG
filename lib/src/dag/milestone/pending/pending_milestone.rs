@@ -70,11 +70,7 @@ mod tests {
 
     use dag::milestone::pending::MilestoneSignature;
     use dag::milestone::Milestone;
-    use dag::transaction::{
-        data::TransactionData,
-        header::TransactionHeader,
-        Transaction
-    };
+    use dag::transaction::{data::TransactionData, header::TransactionHeader, Transaction};
 
     fn update(pending: &PendingMilestone, update: StateUpdate) -> PendingMilestone {
         let mut _pending = pending.clone();
@@ -108,18 +104,18 @@ mod tests {
     fn test_new_pending_milestone() {
         let milestone_transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
         let transaction = Transaction::new(
             TransactionHeader::new(hash, 0, 1, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let second_transaction = Transaction::new(
             TransactionHeader::new(transaction.get_hash(), 0, 1, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         {
@@ -149,18 +145,18 @@ mod tests {
     fn test_pending_milestone_state() {
         let milestone_transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
         let trunk_transaction = Transaction::new(
             TransactionHeader::new(0, hash, 1, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let transaction = Transaction::new(
             TransactionHeader::new(0, trunk_transaction.get_hash(), 1, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         let pending = PendingMilestone::new(transaction.clone(), milestone);
@@ -186,7 +182,7 @@ mod tests {
     fn test_signing_milestone_state() {
         let milestone_transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
@@ -194,17 +190,17 @@ mod tests {
         // New milestone transaction
         let transaction = Transaction::new(
             TransactionHeader::new(0, hash, 1, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let new_milestone = Transaction::new(
             TransactionHeader::new(transaction.get_hash(), 0, 2, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         // Second transaction for testing chain and new events
         let second_transaction = Transaction::new(
             TransactionHeader::new(0, hash, 2, 0, 1, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         // Create a milestone in the signing state
         let mut pending = PendingMilestone::new(new_milestone.clone(), milestone);
@@ -247,7 +243,7 @@ mod tests {
     fn test_approved_state() {
         let milestone_transaction = Transaction::new(
             TransactionHeader::new(0, 0, 0, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
@@ -255,12 +251,12 @@ mod tests {
         // New milestone transaction
         let transaction = Transaction::new(
             TransactionHeader::new(hash, 0, 1, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         let new_milestone = Transaction::new(
             TransactionHeader::new(transaction.get_hash(), 0, 2, 0, 0, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         // Create a milestone in the signing state
@@ -279,7 +275,7 @@ mod tests {
         // Chain and signature events should raise errors
         let second_transaction = Transaction::new(
             TransactionHeader::new(0, 0, 2, 0, 1, 0),
-            TransactionData::Genesis
+            TransactionData::Genesis,
         );
 
         match raw_update(&approved, StateUpdate::Chain(second_transaction)) {
