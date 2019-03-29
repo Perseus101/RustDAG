@@ -5,11 +5,11 @@ use dag::storage::mpt::NodeUpdates;
 pub struct TransactionUpdates {
     pub contract: Option<Contract>,
     pub node_updates: Option<NodeUpdates<ContractValue>>,
-    pub referenced: Vec<u64>,
+    pub referenced: [u64; 2],
 }
 
 impl TransactionUpdates {
-    pub fn new(referenced: Vec<u64>) -> Self {
+    pub fn new(referenced: [u64; 2]) -> Self {
         TransactionUpdates {
             contract: None,
             node_updates: None,

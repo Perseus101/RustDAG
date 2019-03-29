@@ -216,18 +216,12 @@ impl PendingState {
 mod tests {
     use super::*;
     use dag::milestone::pending::MilestoneSignature;
-    use dag::transaction::data::TransactionData;
+    use dag::transaction::{data::TransactionData, header::TransactionHeader};
 
     fn create_transaction(branch: u64, trunk: u64, contract: u64) -> Transaction {
         Transaction::new(
-            branch,
-            trunk,
-            Vec::new(),
-            contract,
-            0,
-            0,
-            0,
-            TransactionData::Genesis,
+            TransactionHeader::new(branch, trunk, contract, 0, 0, 0),
+            TransactionData::Genesis
         )
     }
 

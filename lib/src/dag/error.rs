@@ -17,3 +17,5 @@ impl fmt::Display for BlockDAGError {
         }
     }
 }
+
+impl Error for BlockDAGError {}

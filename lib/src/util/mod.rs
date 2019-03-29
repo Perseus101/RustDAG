@@ -1,6 +1,7 @@
 mod hex_transaction;
 mod misc;
 
+pub mod array;
 pub mod peer;
 pub mod types;
 

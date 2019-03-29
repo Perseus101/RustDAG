@@ -1,7 +1,6 @@
 [workspace]
 members = [
   "lib",
-  "client",
   "cli",
   "server",
   "wasm_api"

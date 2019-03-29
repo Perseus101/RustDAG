@@ -5,9 +5,9 @@ use rustdag_lib::{
     dag::{
         blockdag::BlockDAG,
         contract::source::ContractSource,
-        transaction::{data::TransactionData, Transaction},
+        transaction::{data::TransactionData, header::TransactionHeader, Transaction},
     },
-    security::{hash::proof::proof_of_work, keys::PrivateKey, ring::digest::SHA512_256},
+    security::hash::proof::proof_of_work,
     util::{
         types::TransactionStatus,
         peer::{ContractPeer, MPTNodePeer, Peer, TransactionPeer}
@@ -47,19 +47,13 @@ impl Server {
         let branch = self.peer.get_transaction(tip_hashes.branch_hash).unwrap();
         let trunk_nonce = proof_of_work(trunk.get_nonce(), branch.get_nonce());
 
-        let mut pk = PrivateKey::new(&SHA512_256);
-
-        let mut transaction = Transaction::create(
-            tip_hashes.branch_hash,
-            tip_hashes.trunk_hash,
-            vec![],
-            0,
-            trunk_nonce,
-            root,
-            TransactionData::GenContract(contract_src.clone()),
+        let mut transaction = Transaction::new(
+            TransactionHeader::new(tip_hashes.branch_hash, tip_hashes.trunk_hash, 0, root, 0, trunk_nonce),
+            TransactionData::GenContract(contract_src)
         );
 
-        transaction.sign(&mut pk);
+        let pk = rustdag_lib::security::keys::eddsa::new_key_pair().unwrap();
+        transaction.sign_eddsa(&pk);
 
         let contract_id = transaction.get_hash();
 

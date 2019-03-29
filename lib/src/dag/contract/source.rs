@@ -157,7 +157,7 @@ mod tests {
         let json_value = json!({
             "code": base64::encode_config(&compress(&code), base64::URL_SAFE),
         });
-        println!("{:?}", json_value);
+
         assert_eq!(json_value, serde_json::to_value(source).unwrap());
     }
 

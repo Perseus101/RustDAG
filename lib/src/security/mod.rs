@@ -1,4 +1,3 @@
-pub extern crate ring;
-
 pub mod hash;
 pub mod keys;
+pub mod error;
