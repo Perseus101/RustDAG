@@ -4,6 +4,7 @@ use dag::{
 };
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum StateUpdate {
     Chain(Transaction),
     Sign(MilestoneSignature),

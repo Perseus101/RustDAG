@@ -5,6 +5,7 @@ use std::hash::Hash;
 use std::error::Error;
 use std::fmt;
 use std::ops::Deref;
+use std::borrow::Borrow;
 
 #[derive(PartialEq, Debug)]
 pub enum MapError {
@@ -47,18 +48,25 @@ pub enum OOB<'a, T> {
 }
 
 impl<'a, T> OOB<'a, T> {
-    pub fn borrow(&'a self) -> &'a T {
+    pub fn inner_ref(&'a self) -> &'a T {
         match self {
             OOB::Owned(t) => &t,
-            OOB::Borrowed(ref t) => return t,
+            OOB::Borrowed(ref t) => t,
         }
     }
 }
+
+impl<'a, T> Borrow<T> for OOB<'a, T> {
+    fn borrow(&self) -> &T {
+        self.inner_ref()
+    }
+}
+
 
 impl<'a, T> Deref for OOB<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        self.borrow()
+        self.inner_ref()
     }
 }

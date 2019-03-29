@@ -41,6 +41,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         self.nodes
     }
 
+    #[allow(clippy::needless_lifetimes)]
     pub fn get<'a>(&'a self, root: u64, mut k: u64) -> Result<OOB<'a, T>, MapError> {
         let mut node = Some(self.nodes.get(&root)?);
         // 16 branch nodes + 1 leaf node
@@ -50,13 +51,13 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 OOB::Owned(Node::BranchNode(pointers)) => {
                     let hash = pointers
                         .get_next_hash(k)
-                        .map_or(Err(MapError::NotFound), |hash| Ok(hash))?;
+                        .ok_or(MapError::NotFound)?;
                     Some(self.nodes.get(&hash)?)
                 }
                 OOB::Borrowed(Node::BranchNode(pointers)) => {
                     let hash = pointers
                         .get_next_hash(k)
-                        .map_or(Err(MapError::NotFound), |hash| Ok(hash))?;
+                        .ok_or(MapError::NotFound)?;
                     Some(self.nodes.get(&hash)?)
                 }
                 OOB::Owned(Node::LeafNode(value)) => {
@@ -83,7 +84,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
                 if i == 16 {
                     break;
                 }
-                let loop_to_new_node = match loop_node.borrow() {
+                let loop_to_new_node = match loop_node.inner_ref() {
                     Node::BranchNode(pointers) => {
                         if let Some(hash) = pointers.get_next_hash(key) {
                             Some(self.nodes.get(&hash).expect("Node does not exist"))
@@ -164,9 +165,9 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         let root_b_handle = self.nodes.get(&hash_b).expect("Root node does not exist");
         let root_ref_handle = self.nodes.get(&hash_ref).expect("Root node does not exist");
 
-        let root_a = root_a_handle.borrow();
-        let root_b = root_b_handle.borrow();
-        let root_ref = root_ref_handle.borrow();
+        let root_a = root_a_handle.inner_ref();
+        let root_b = root_b_handle.inner_ref();
+        let root_ref = root_ref_handle.inner_ref();
 
         if let (Node::LeafNode(a_val), Node::LeafNode(b_val), Node::LeafNode(ref_val)) =
             (root_a, root_b, root_ref)

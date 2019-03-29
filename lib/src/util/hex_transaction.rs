@@ -1,10 +1,3 @@
-use std::{u32, u64};
-
-use serde::{
-    ser::{Serializer},
-    de::{Deserialize, Deserializer, Error}
-};
-
 use dag::transaction::{
     Transaction,
     header::TransactionHeader,
@@ -14,57 +7,71 @@ use dag::transaction::{
 
 use super::{u32_as_hex_string, u64_as_hex_string};
 
-fn serialize_u32_as_hex<S>(key: &u32, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer
-{
-    serializer.serialize_str(&u32_as_hex_string(*key))
+mod hex_u32 {
+    use super::*;
+    use std::u32;
+    use serde::{
+        ser::{Serializer},
+        de::{Deserialize, Deserializer, Error}
+    };
+
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn serialize<S>(key: &u32, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&u32_as_hex_string(*key))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<u32, D::Error>
+        where D: Deserializer<'de>
+    {
+        String::deserialize(deserializer)
+            .and_then(|string| {
+                u32::from_str_radix(&string, 16)
+                    .map_err(|err| Error::custom(err.to_string()))
+            })
+    }
 }
 
-fn deserialize_u32_as_hex<'de, D>(deserializer: D) -> Result<u32, D::Error>
-    where D: Deserializer<'de>
-{
-    String::deserialize(deserializer)
-        .and_then(|string| {
-            u32::from_str_radix(&string, 16)
-                .map_err(|err| Error::custom(err.to_string()))
-        })
-}
+mod hex_u64 {
+    use super::*;
+    use std::u64;
+    use serde::{
+        ser::{Serializer},
+        de::{Deserialize, Deserializer, Error}
+    };
 
-fn serialize_u64_as_hex<S>(key: &u64, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer
-{
-    serializer.serialize_str(&u64_as_hex_string(*key))
-}
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn serialize<S>(key: &u64, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&u64_as_hex_string(*key))
+    }
 
-fn deserialize_u64_as_hex<'de, D>(deserializer: D) -> Result<u64, D::Error>
-    where D: Deserializer<'de>
-{
-    String::deserialize(deserializer)
-        .and_then(|string| {
-            u64::from_str_radix(&string, 16)
-                .map_err(|err| Error::custom(err.to_string()))
-        })
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<u64, D::Error>
+        where D: Deserializer<'de>
+    {
+        String::deserialize(deserializer)
+            .and_then(|string| {
+                u64::from_str_radix(&string, 16)
+                    .map_err(|err| Error::custom(err.to_string()))
+            })
+    }
 }
 
 #[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct HexTransactionHeader {
-    #[serde(serialize_with = "serialize_u64_as_hex",
-            deserialize_with = "deserialize_u64_as_hex")]
+    #[serde(with = "hex_u64")]
     branch_transaction: u64,
-    #[serde(serialize_with = "serialize_u64_as_hex",
-            deserialize_with = "deserialize_u64_as_hex")]
+    #[serde(with = "hex_u64")]
     trunk_transaction: u64,
-    #[serde(serialize_with = "serialize_u64_as_hex",
-            deserialize_with = "deserialize_u64_as_hex")]
+    #[serde(with = "hex_u64")]
     contract: u64,
-    #[serde(serialize_with = "serialize_u64_as_hex",
-            deserialize_with = "deserialize_u64_as_hex")]
+    #[serde(with = "hex_u64")]
     root: u64,
-    #[serde(serialize_with = "serialize_u64_as_hex",
-            deserialize_with = "deserialize_u64_as_hex")]
+    #[serde(with = "hex_u64")]
     timestamp: u64,
-    #[serde(serialize_with = "serialize_u32_as_hex",
-            deserialize_with = "deserialize_u32_as_hex")]
+    #[serde(with = "hex_u32")]
     nonce: u32,
 }
 

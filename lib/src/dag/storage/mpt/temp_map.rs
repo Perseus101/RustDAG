@@ -51,7 +51,7 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
         let root = self
             .new_nodes
             .remove(&root)
-            .map_or(Err(MapError::NotFound), |node| Ok(node))?;
+            .ok_or(MapError::NotFound)?;
 
         move_nodes_recurse(&root, &mut self.new_nodes, &mut branches);
 

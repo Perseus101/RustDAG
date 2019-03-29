@@ -59,7 +59,7 @@ pub fn new_key_pair() -> Result<EdDSAKeyPair, KeyError> {
 
 pub fn get_public_key(key_pair: &EdDSAKeyPair) -> EdDSAPublicKey {
     let mut buffer = [0u8; ED25519_PUBLIC_KEY_LEN];
-    &buffer[..ED25519_PUBLIC_KEY_LEN]
+    buffer[..ED25519_PUBLIC_KEY_LEN]
         .clone_from_slice(key_pair.public_key_bytes());
     buffer
 }

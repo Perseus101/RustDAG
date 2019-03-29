@@ -20,7 +20,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new<'a>(server_url: &'a str) -> Self {
+    pub fn new(server_url: &str) -> Self {
         let peer = Peer::new(String::from(server_url));
         let blockdag = peer.clone().into_remote_blockdag();
         Server { peer, blockdag }
@@ -32,7 +32,7 @@ impl Server {
         println!("Arguments: {:?}", args);
     }
 
-    pub fn deploy_contract<'a>(&self, filename: &str) -> u64 {
+    pub fn deploy_contract(&self, filename: &str) -> u64 {
         let root = self.blockdag.get_mpt_default_root();
 
         // Load contract

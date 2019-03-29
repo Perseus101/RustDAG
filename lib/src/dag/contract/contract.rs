@@ -114,7 +114,7 @@ impl Contract {
         let mut temp_state = self.build_state(&module, storage, root)?;
         let return_value = self.exec_from_state(func_name, args, &mut temp_state)?;
         let updates = temp_state.updates()?;
-        return Ok((return_value, updates));
+        Ok((return_value, updates))
     }
 
     /// Execute the contract function
@@ -146,7 +146,7 @@ impl Contract {
                     .map(|x| RuntimeValue::from(x.clone()))
                     .collect::<Vec<_>>(),
             )?
-            .map(|value| ContractValue::from(value));
+            .map(ContractValue::from);
         Ok(return_value)
     }
 }

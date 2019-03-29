@@ -100,9 +100,9 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         transaction: &Transaction,
     ) -> Result<TransactionUpdates, TransactionError> {
         let trunk = self.get_transaction(transaction.get_trunk_hash())
-            .ok_or(TransactionError::Rejected("Trunk transaction not found".into()))?;
+            .ok_or_else(|| TransactionError::Rejected("Trunk transaction not found".into()))?;
         let branch = self.get_transaction(transaction.get_branch_hash())
-            .ok_or(TransactionError::Rejected("Branch transaction not found".into()))?;
+            .ok_or_else(|| TransactionError::Rejected("Branch transaction not found".into()))?;
 
         if !valid_proof(
             trunk.get_nonce(),
@@ -179,14 +179,12 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
             self.contracts.set(hash, contract)?;
         }
 
-        let mut res = TransactionStatus::Pending;
-
-        if transaction.get_nonce() > MILESTONE_NONCE_MIN
+        let res = if transaction.get_nonce() > MILESTONE_NONCE_MIN
             && transaction.get_nonce() < MILESTONE_NONCE_MAX
             && self.milestones.new_milestone(transaction.clone())
-        {
-            res = TransactionStatus::Milestone;
-        }
+        { TransactionStatus::Milestone }
+        else { TransactionStatus::Pending };
+
         let refs = transaction.get_all_refs();
         self.pending_transactions.set(hash, transaction)?;
 
@@ -195,7 +193,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         }
         self.tips.push(hash);
 
-        return Ok(res);
+        Ok(res)
     }
 
     /// Add a confirmed milestone to the list of milestones
@@ -285,10 +283,10 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         if transaction.get_timestamp() < timestamp {
             return false;
         }
-        for t_hash in transaction.get_all_refs().into_iter() {
+        for t_hash in transaction.get_all_refs().iter() {
             let transaction_hash = *t_hash;
             if let Some(transaction_handle) = self.get_transaction(transaction_hash) {
-                let transaction = transaction_handle.borrow();
+                let transaction = transaction_handle.inner_ref();
                 if transaction_hash == hash {
                     // This is the transaction we are looking for, return
                     return true;
@@ -315,7 +313,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
     /// pending_transactions to transactions
     #[allow(unused_must_use)]
     fn confirm_transactions(&mut self, transaction: &Transaction) {
-        for transaction_hash in transaction.get_all_refs().into_iter() {
+        for transaction_hash in transaction.get_all_refs().iter() {
             if let Some(pending_transaction) = self.pending_transactions.remove(&transaction_hash) {
                 self.confirm_transactions(&pending_transaction);
                 self.transactions.set(*transaction_hash, pending_transaction);
@@ -324,7 +322,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
     }
 
     /// Returns the transaction specified by hash
-    pub fn get_transaction<'a>(&'a self, hash: u64) -> Option<OOB<'a, Transaction>> {
+    pub fn get_transaction(&self, hash: u64) -> Option<OOB<Transaction>> {
         self.pending_transactions
             .get(&hash)
             .map_or(self.transactions.get(&hash).ok(), |pending_transaction| {
@@ -370,11 +368,11 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         TransactionHashes::new(trunk_tip, branch_tip)
     }
 
-    pub fn get_contract<'a>(&'a self, id: u64) -> Option<OOB<Contract>> {
+    pub fn get_contract(&self, id: u64) -> Option<OOB<Contract>> {
         self.contracts.get(&id).ok()
     }
 
-    pub fn get_mpt_node<'a>(&'a self, id: u64) -> Option<OOB<Node<ContractValue>>> {
+    pub fn get_mpt_node(&self, id: u64) -> Option<OOB<Node<ContractValue>>> {
         self.storage.nodes.get(&id).ok()
     }
 
