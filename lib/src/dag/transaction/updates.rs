@@ -25,6 +25,10 @@ impl TransactionUpdates {
         self.node_updates = Some(node_updates);
     }
 
+    pub fn get_node_updates(self) -> Option<NodeUpdates<ContractValue>> {
+        self.node_updates
+    }
+
     pub fn get_storage_root(&self) -> Option<u64> {
         if let Some(ref updates) = self.node_updates {
             Some(updates.get_root_hash())

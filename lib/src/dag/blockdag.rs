@@ -7,7 +7,7 @@ use dag::error::BlockDAGError;
 use dag::milestone::pending::{MilestoneSignature, MilestoneTracker};
 use dag::milestone::Milestone;
 use dag::storage::map::{Map, OOB};
-use dag::storage::mpt::{node::Node, MerklePatriciaTree};
+use dag::storage::mpt::{NodeUpdates, node::Node, MerklePatriciaTree};
 use dag::transaction::{
     data::TransactionData, error::TransactionError, header::TransactionHeader,
     updates::TransactionUpdates, Transaction,
@@ -102,7 +102,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
     pub fn try_add_transaction(
         &self,
         transaction: &Transaction,
-    ) -> Result<TransactionUpdates, TransactionError> {
+    ) -> Result<TransactionUpdates, BlockDAGError> {
         let trunk = self
             .get_transaction(transaction.get_trunk_hash())
             .ok_or_else(|| TransactionError::Rejected("Trunk transaction not found".into()))?;
@@ -115,12 +115,12 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
             branch.get_nonce(),
             transaction.get_nonce(),
         ) {
-            return Err(TransactionError::Rejected("Invalid nonce".into()));
+            return Err(TransactionError::Rejected("Invalid nonce".into()).into());
         }
 
         // Verify the transaction's signature
         if !transaction.verify() {
-            return Err(TransactionError::Rejected("Invalid signature".into()));
+            return Err(TransactionError::Rejected("Invalid signature".into()).into());
         }
 
         let hash = transaction.get_hash();
@@ -130,11 +130,11 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         // Process the transaction's data
         match transaction.get_data() {
             TransactionData::Genesis => {
-                return Err(TransactionError::Rejected("Genesis transaction".into()))
+                return Err(TransactionError::Rejected("Genesis transaction".into()).into())
             }
             TransactionData::GenContract(src) => {
                 if transaction.get_contract() != 0 {
-                    return Err(TransactionError::Rejected("Invalid gen contract id".into()));
+                    return Err(TransactionError::Rejected("Invalid gen contract id".into()).into());
                 }
                 // Generate a new contract
                 match Contract::new(src.clone(), hash, &self.storage, transaction.get_root()) {
@@ -142,30 +142,27 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
                         updates.add_contract(contract);
                         updates.add_node_updates(node_updates);
                     }
-                    Err(_) => return Err(TransactionError::Rejected("Invalid contract".into())),
+                    Err(_) => return Err(TransactionError::Rejected("Invalid contract".into()).into()),
                 }
             }
             TransactionData::ExecContract(func_name, args) => {
-                if let Ok(contract) = self.contracts.get(&transaction.get_contract()) {
-                    match contract.exec(func_name, args, &self.storage, transaction.get_root()) {
-                        Ok((_val, node_updates)) => {
-                            updates.add_node_updates(node_updates);
-                        }
-                        Err(err) => {
-                            return Err(TransactionError::Rejected(format!(
-                                "Function failed to execute: {:?}",
-                                err
-                            )));
-                        }
-                    }
-                } else {
-                    return Err(TransactionError::Rejected("Contract not found".into()));
-                }
+                let contract = transaction.get_contract();
+                let root = transaction.get_root();
+                let (_, node_updates) = self.execute_contract(contract, root, func_name, args)?;
+                updates.add_node_updates(node_updates);
             }
             TransactionData::Empty => {}
         };
 
         Ok(updates)
+    }
+
+    pub fn execute_contract(&self, contract: u64, root: u64, func_name: &String, args: &[ContractValue])
+            -> Result<(Option<ContractValue>, NodeUpdates<ContractValue>), TransactionError> {
+        let contract = self.contracts.get(&contract)
+            .map_err(|_| TransactionError::Rejected("Contract not found".into()))?;
+        contract.exec(func_name, args, &self.storage, root)
+            .map_err(|err| err.into())
     }
 
     /// inserts the new transaction into the list
@@ -175,7 +172,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         &mut self,
         transaction: Transaction,
         updates: TransactionUpdates,
-    ) -> Result<TransactionStatus, TransactionError> {
+    ) -> Result<TransactionStatus, BlockDAGError> {
         let hash = transaction.get_hash();
 
         if let Some(updates) = updates.node_updates {
@@ -203,6 +200,17 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         self.tips.push(hash);
 
         Ok(res)
+    }
+
+    pub fn try_merge(&self, root_a: u64, root_b: u64, root_ref: u64)
+            -> Option<NodeUpdates<ContractValue>> {
+        self.storage.try_merge(root_a, root_b, root_ref)
+    }
+
+    pub fn add_note_updates(&mut self, updates: NodeUpdates<ContractValue>)
+            -> Result<(), BlockDAGError> {
+        self.storage.commit_set(updates)
+            .map_err(|err| BlockDAGError::MapError(err))
     }
 
     /// Add a confirmed milestone to the list of milestones
@@ -486,7 +494,7 @@ mod tests {
             dag.try_add_transaction(&bad_transaction),
             Err(TransactionError::Rejected(
                 "Branch transaction not found".into()
-            ))
+            ).into())
         );
     }
 

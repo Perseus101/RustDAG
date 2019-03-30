@@ -41,8 +41,7 @@ impl<T: MPTData, M: MPTStorageMap<T>> MerklePatriciaTree<T, M> {
         self.nodes
     }
 
-    #[allow(clippy::needless_lifetimes)]
-    pub fn get<'a>(&'a self, root: u64, mut k: u64) -> Result<OOB<'a, T>, MapError> {
+    pub fn get(&self, root: u64, mut k: u64) -> Result<OOB<T>, MapError> {
         let mut node = Some(self.nodes.get(&root)?);
         // 16 branch nodes + 1 leaf node
         for _ in 0..17 {

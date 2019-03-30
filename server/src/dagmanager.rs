@@ -9,7 +9,7 @@ use dag::{
     contract::{state::ContractStateStorage, Contract, ContractValue},
     milestone::pending::MilestoneSignature,
     storage::mpt::node::Node,
-    transaction::{error::TransactionError, Transaction},
+    transaction::Transaction,
 };
 use peermanager::PeerManager;
 use util::peer::Peer;
@@ -142,10 +142,10 @@ impl<
                         }
                         status
                     }
-                    Err(TransactionError::Rejected(msg)) => TransactionStatus::Rejected(msg),
+                    Err(err) => TransactionStatus::Rejected(format!("{}", err)),
                 }
             }
-            Err(TransactionError::Rejected(msg)) => TransactionStatus::Rejected(msg),
+            Err(err) => TransactionStatus::Rejected(format!("{}", err)),
         }
     }
 

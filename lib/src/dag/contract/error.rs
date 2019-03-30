@@ -14,6 +14,26 @@ pub enum ContractError {
     TypeMismatch,
 }
 
+impl PartialEq<ContractError> for ContractError {
+    fn eq(&self, other: &ContractError) -> bool {
+        match (self, other) {
+            (ContractError::WasmError(_), ContractError::WasmError(_)) => {
+                true
+            },
+            (ContractError::MapError(se), ContractError::MapError(oe)) => {
+                se.eq(oe)
+            },
+            (ContractError::RequiredFnNotFound, ContractError::RequiredFnNotFound) => {
+                true
+            },
+            (ContractError::TypeMismatch, ContractError::TypeMismatch) => {
+                true
+            },
+            _ => false
+        }
+    }
+}
+
 impl fmt::Display for ContractError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
