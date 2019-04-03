@@ -65,7 +65,13 @@ pub struct HexTransactionHeader {
     #[serde(with = "hex_u64")]
     contract: u64,
     #[serde(with = "hex_u64")]
-    root: u64,
+    trunk_root: u64,
+    #[serde(with = "hex_u64")]
+    branch_root: u64,
+    #[serde(with = "hex_u64")]
+    merge_root: u64,
+    #[serde(with = "hex_u64")]
+    ancestor_root: u64,
     #[serde(with = "hex_u64")]
     timestamp: u64,
     #[serde(with = "hex_u32")]
@@ -86,7 +92,10 @@ impl From<TransactionHeader> for HexTransactionHeader {
             branch_transaction: header.branch_transaction,
             trunk_transaction: header.trunk_transaction,
             contract: header.contract,
-            root: header.root,
+            trunk_root: header.trunk_root,
+            branch_root: header.branch_root,
+            merge_root: header.merge_root,
+            ancestor_root: header.ancestor_root,
             timestamp: header.timestamp,
             nonce: header.nonce,
         }
@@ -95,14 +104,17 @@ impl From<TransactionHeader> for HexTransactionHeader {
 
 impl From<HexTransactionHeader> for TransactionHeader {
     fn from(header: HexTransactionHeader) -> Self {
-        TransactionHeader {
-            branch_transaction: header.branch_transaction,
-            trunk_transaction: header.trunk_transaction,
-            contract: header.contract,
-            root: header.root,
-            timestamp: header.timestamp,
-            nonce: header.nonce,
-        }
+        TransactionHeader::new(
+            header.branch_transaction,
+            header.trunk_transaction,
+            header.contract,
+            header.trunk_root,
+            header.branch_root,
+            header.merge_root,
+            header.ancestor_root,
+            header.timestamp,
+            header.nonce,
+        )
     }
 }
 
@@ -132,7 +144,7 @@ mod tests {
     #[test]
     fn test_convert() {
         let transaction = Transaction::new(
-            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionHeader::new(0, 1, 2, 3, 4, 5, 6, 7, 8),
             TransactionData::Genesis,
         );
         let hex: HexEncodedTransaction = transaction.clone().into();
@@ -142,7 +154,9 @@ mod tests {
         assert_eq!(transaction.get_trunk_hash(), converted.get_trunk_hash());
         assert_eq!(transaction.get_contract(), converted.get_contract());
         assert_eq!(transaction.get_nonce(), converted.get_nonce());
-        assert_eq!(transaction.get_root(), converted.get_root());
+        assert_eq!(transaction.get_trunk_root(), converted.get_trunk_root());
+        assert_eq!(transaction.get_branch_root(), converted.get_branch_root());
+        assert_eq!(transaction.get_merge_root(), converted.get_merge_root());
         assert_eq!(transaction.get_address(), converted.get_address());
         assert_eq!(transaction.get_signature(), converted.get_signature());
         assert_eq!(transaction.get_data(), converted.get_data());
@@ -151,7 +165,7 @@ mod tests {
     #[test]
     fn test_serialize() {
         let transaction: HexEncodedTransaction = Transaction::new(
-            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionHeader::new(0, 1, 2, 3, 4, 5, 6, 7, 8),
             TransactionData::Genesis,
         )
         .into();
@@ -159,9 +173,12 @@ mod tests {
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
             "contract": "0000000000000002",
-            "root": "0000000000000003",
-            "timestamp": "0000000000000004",
-            "nonce": "00000005",
+            "trunk_root": "0000000000000003",
+            "branch_root": "0000000000000004",
+            "merge_root": "0000000000000005",
+            "ancestor_root": "0000000000000006",
+            "timestamp": "0000000000000007",
+            "nonce": "00000008",
             "signature": TransactionSignature::Unsigned,
             "data": TransactionData::Genesis
         });
@@ -171,7 +188,7 @@ mod tests {
     #[test]
     fn test_deserialize() {
         let transaction: HexEncodedTransaction = Transaction::new(
-            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionHeader::new(0, 1, 2, 3, 4, 5, 6, 7, 8),
             TransactionData::Genesis,
         )
         .into();
@@ -179,9 +196,12 @@ mod tests {
             "branch_transaction": "0000000000000000",
             "trunk_transaction": "0000000000000001",
             "contract": "0000000000000002",
-            "root": "0000000000000003",
-            "timestamp": "0000000000000004",
-            "nonce": "00000005",
+            "trunk_root": "0000000000000003",
+            "branch_root": "0000000000000004",
+            "merge_root": "0000000000000005",
+            "ancestor_root": "0000000000000006",
+            "timestamp": "0000000000000007",
+            "nonce": "00000008",
             "signature": TransactionSignature::Unsigned,
             "data": TransactionData::Genesis
         });
@@ -192,7 +212,7 @@ mod tests {
     fn test_serialize_deserialize() {
         // Check the transaction is identical after serializing and deserializing
         let transaction: HexEncodedTransaction = Transaction::new(
-            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionHeader::new(0, 1, 2, 3, 4, 5, 6, 7, 8),
             TransactionData::Genesis,
         )
         .into();
@@ -201,7 +221,7 @@ mod tests {
 
         // Check a signed transaction is identical after serializing and deserializing
         let mut signed_transaction = Transaction::new(
-            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionHeader::new(0, 1, 2, 3, 4, 5, 6, 7, 8),
             TransactionData::Genesis,
         );
         let key = new_key_pair().unwrap();

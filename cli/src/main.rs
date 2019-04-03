@@ -3,6 +3,8 @@ use clap::{App, Arg, SubCommand};
 
 extern crate rustdag_lib;
 
+mod error;
+mod merge_header;
 mod server;
 
 fn main() {
@@ -55,30 +57,55 @@ fn main() {
                         .index(2),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("empty")
+                .version("0.1")
+                .author("Colin Moore <colin@moore.one>")
+                .about("Create an empty transaction")
+                .arg(
+                    Arg::with_name("default")
+                        .short("d")
+                        .long("default")
+                        .help("Use default MPT root?"),
+                ),
+        )
         .get_matches();
 
-    let server = server::Server::new(
+    let mut server = server::Server::new(
         matches
             .value_of("server")
             .unwrap_or("http://localhost:4200"),
     );
 
-    if let Some(matches) = matches.subcommand_matches("deploy") {
-        let filename = matches.value_of("INPUT").unwrap();
-        let contract_id = server.deploy_contract(filename);
-        println!("Contract ID: {}", contract_id);
-    } else if let Some(matches) = matches.subcommand_matches("run") {
-        let contract_id = matches
-            .value_of("contract")
-            .unwrap()
-            .parse::<u64>()
-            .expect("Contract must be a valid integer");
-        let function_name = matches.value_of("FUNCTION").unwrap();
-        let args: Vec<_> = matches.values_of("FN_ARGS").unwrap().collect();
-        server.run_contract(
-            contract_id,
-            function_name.into(),
-            args.into_iter().map(|x| x.into()).collect::<Vec<String>>(),
-        );
+    match matches.subcommand() {
+        ("deploy", Some(matches)) => {
+            let filename = matches.value_of("INPUT").unwrap();
+            let contract_id = server.deploy_contract(filename);
+            println!("Contract ID: {}", contract_id);
+        }
+        ("run", Some(matches)) => {
+            let contract_id = matches
+                .value_of("contract")
+                .unwrap()
+                .parse::<u64>()
+                .expect("Contract must be a valid integer");
+            let function_name = matches.value_of("FUNCTION").unwrap();
+            let args: Vec<_> = matches.values_of("FN_ARGS").unwrap().collect();
+            let result = server
+                .run_contract(
+                    contract_id,
+                    function_name.into(),
+                    args.into_iter().map(|x| x.into()).collect::<Vec<String>>(),
+                )
+                .expect("Failed to run contract function");
+            println!("Function result: {:?}", result);
+        }
+        ("empty", Some(matches)) => {
+            let default = matches.occurrences_of("default") == 1;
+            server
+                .empty_transaction(default)
+                .expect("Failed to create empty transaction");
+        }
+        _ => {}
     }
 }

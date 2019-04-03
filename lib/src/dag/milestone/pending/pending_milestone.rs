@@ -103,18 +103,18 @@ mod tests {
     #[test]
     fn test_new_pending_milestone() {
         let milestone_transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 0, 0, 0, 0),
+            TransactionHeader::new(0, 0, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
         let transaction = Transaction::new(
-            TransactionHeader::new(hash, 0, 1, 0, 0, 0),
+            TransactionHeader::new(hash, 0, 1, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let second_transaction = Transaction::new(
-            TransactionHeader::new(transaction.get_hash(), 0, 1, 0, 0, 0),
+            TransactionHeader::new(transaction.get_hash(), 0, 1, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
 
@@ -144,18 +144,18 @@ mod tests {
     #[test]
     fn test_pending_milestone_state() {
         let milestone_transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 0, 0, 0, 0),
+            TransactionHeader::new(0, 0, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
         let milestone = Milestone::new(0, milestone_transaction);
 
         let trunk_transaction = Transaction::new(
-            TransactionHeader::new(0, hash, 1, 0, 0, 0),
+            TransactionHeader::new(0, hash, 1, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let transaction = Transaction::new(
-            TransactionHeader::new(0, trunk_transaction.get_hash(), 1, 0, 0, 0),
+            TransactionHeader::new(0, trunk_transaction.get_hash(), 1, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
 
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn test_signing_milestone_state() {
         let milestone_transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 0, 0, 0, 0),
+            TransactionHeader::new(0, 0, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
@@ -189,17 +189,17 @@ mod tests {
 
         // New milestone transaction
         let transaction = Transaction::new(
-            TransactionHeader::new(0, hash, 1, 0, 0, 0),
+            TransactionHeader::new(0, hash, 1, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let new_milestone = Transaction::new(
-            TransactionHeader::new(transaction.get_hash(), 0, 2, 0, 0, 0),
+            TransactionHeader::new(transaction.get_hash(), 0, 2, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
 
         // Second transaction for testing chain and new events
         let second_transaction = Transaction::new(
-            TransactionHeader::new(0, hash, 2, 0, 1, 0),
+            TransactionHeader::new(0, hash, 2, 0, 1, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         // Create a milestone in the signing state
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn test_approved_state() {
         let milestone_transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 0, 0, 0, 0),
+            TransactionHeader::new(0, 0, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let hash = milestone_transaction.get_hash();
@@ -250,12 +250,12 @@ mod tests {
 
         // New milestone transaction
         let transaction = Transaction::new(
-            TransactionHeader::new(hash, 0, 1, 0, 0, 0),
+            TransactionHeader::new(hash, 0, 1, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
 
         let new_milestone = Transaction::new(
-            TransactionHeader::new(transaction.get_hash(), 0, 2, 0, 0, 0),
+            TransactionHeader::new(transaction.get_hash(), 0, 2, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
 
@@ -274,7 +274,7 @@ mod tests {
         let approved = pending;
         // Chain and signature events should raise errors
         let second_transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 2, 0, 1, 0),
+            TransactionHeader::new(0, 0, 2, 0, 1, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
 

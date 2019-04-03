@@ -19,6 +19,15 @@ impl<'a, T: MPTData, M: MPTStorageMap<T>> MPTTempMap<'a, T, M> {
         }
     }
 
+    pub fn from_updates(mpt: &'a MerklePatriciaTree<T, M>, updates: NodeUpdates<T>) -> Self {
+        let mut new_nodes = HashMap::new();
+        for node in updates.into_iter() {
+            new_nodes.insert(node.get_hash(), node);
+        }
+
+        MPTTempMap { mpt, new_nodes }
+    }
+
     pub fn write_out(mut self, root: u64) -> MapResult<NodeUpdates<T>> {
         /// Move root and all its children from nodes_in to nodes out
         fn move_nodes<T: MPTData>(

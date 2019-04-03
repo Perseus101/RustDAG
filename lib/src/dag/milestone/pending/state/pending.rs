@@ -220,7 +220,7 @@ mod tests {
 
     fn create_transaction(branch: u64, trunk: u64, contract: u64) -> Transaction {
         Transaction::new(
-            TransactionHeader::new(branch, trunk, contract, 0, 0, 0),
+            TransactionHeader::new(branch, trunk, contract, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         )
     }

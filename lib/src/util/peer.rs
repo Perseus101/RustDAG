@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 extern crate restson;
-use self::restson::{RestClient, RestPath};
 pub use self::restson::Error;
+use self::restson::{RestClient, RestPath};
 
 use dag::{
     blockdag::BlockDAG,

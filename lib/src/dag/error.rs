@@ -15,12 +15,8 @@ impl fmt::Display for BlockDAGError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             BlockDAGError::MergeError => write!(f, "Merge Error"),
-            BlockDAGError::MapError(err) => {
-                write!(f, "Map Error: {}", err)
-            }
-            BlockDAGError::TransactionError(err) => {
-                write!(f, "Transaction Error: {}", err)
-            },
+            BlockDAGError::MapError(err) => write!(f, "Map Error: {}", err),
+            BlockDAGError::TransactionError(err) => write!(f, "Transaction Error: {}", err),
             BlockDAGError::IncompleteChain(missing) => {
                 write!(f, "Incomplete chain, missing {:?}", missing)
             }

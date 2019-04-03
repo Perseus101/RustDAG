@@ -48,8 +48,20 @@ impl Transaction {
         self.header.contract
     }
 
-    pub fn get_root(&self) -> u64 {
-        self.header.root
+    pub fn get_trunk_root(&self) -> u64 {
+        self.header.trunk_root
+    }
+
+    pub fn get_branch_root(&self) -> u64 {
+        self.header.branch_root
+    }
+
+    pub fn get_merge_root(&self) -> u64 {
+        self.header.merge_root
+    }
+
+    pub fn get_ancestor_root(&self) -> u64 {
+        self.header.ancestor_root
     }
 
     pub fn get_timestamp(&self) -> u64 {
@@ -135,7 +147,7 @@ mod tests {
         let trunk_hash = 1;
 
         let transaction = Transaction::new(
-            TransactionHeader::new(branch_hash, trunk_hash, 0, 0, 0, 0),
+            TransactionHeader::new(branch_hash, trunk_hash, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
 
@@ -143,14 +155,14 @@ mod tests {
         assert_eq!(transaction.get_trunk_hash(), trunk_hash);
         assert_eq!([branch_hash, trunk_hash], transaction.get_all_refs());
         assert_eq!(0, transaction.get_nonce());
-        assert_eq!(9766645081009868391, transaction.get_hash());
+        assert_eq!(8846522215756168669, transaction.get_hash());
     }
 
     #[test]
     fn test_sign_and_verify_transaction() {
         let key = new_key_pair().unwrap();
         let mut transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 0, 0, 0, 0),
+            TransactionHeader::new(0, 0, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         transaction.sign_eddsa(&key);
@@ -160,16 +172,19 @@ mod tests {
     #[test]
     fn test_serialize() {
         let transaction = Transaction::new(
-            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionHeader::new(0, 1, 2, 3, 4, 5, 6, 7, 8),
             TransactionData::Genesis,
         );
         let json_value = json!({
             "branch_transaction": 0,
             "trunk_transaction": 1,
             "contract": 2,
-            "root": 3,
-            "timestamp": 4,
-            "nonce": 5,
+            "trunk_root": 3,
+            "branch_root": 4,
+            "merge_root": 5,
+            "ancestor_root": 6,
+            "timestamp": 7,
+            "nonce": 8,
             "signature": TransactionSignature::Unsigned,
             "data": TransactionData::Genesis
         });
@@ -180,16 +195,19 @@ mod tests {
     #[test]
     fn test_deserialize() {
         let transaction = Transaction::new(
-            TransactionHeader::new(0, 1, 2, 3, 4, 5),
+            TransactionHeader::new(0, 1, 2, 3, 4, 5, 6, 7, 8),
             TransactionData::Genesis,
         );
         let json_value = json!({
             "branch_transaction": 0,
             "trunk_transaction": 1,
             "contract": 2,
-            "root": 3,
-            "timestamp": 4,
-            "nonce": 5,
+            "trunk_root": 3,
+            "branch_root": 4,
+            "merge_root": 5,
+            "ancestor_root": 6,
+            "timestamp": 7,
+            "nonce": 8,
             "signature": TransactionSignature::Unsigned,
             "data": TransactionData::Genesis
         });
@@ -200,7 +218,7 @@ mod tests {
     fn test_serialize_deserialize() {
         // Check the transaction is identical after serializing and deserializing
         let transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 0, 0, 0, 0),
+            TransactionHeader::new(0, 0, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let json_value = serde_json::to_value(transaction.clone()).unwrap();
@@ -208,7 +226,7 @@ mod tests {
 
         // Check a signed transaction is identical after serializing and deserializing
         let mut signed_transaction = Transaction::new(
-            TransactionHeader::new(0, 0, 0, 0, 0, 0),
+            TransactionHeader::new(0, 0, 0, 0, 0, 0, 0, 0, 0),
             TransactionData::Genesis,
         );
         let key = new_key_pair().unwrap();
