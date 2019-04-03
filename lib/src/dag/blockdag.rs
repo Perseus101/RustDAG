@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 
 use rand::{thread_rng, Rng};
 
@@ -192,7 +193,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
         &self,
         contract: u64,
         root: u64,
-        func_name: &String,
+        func_name: &str,
         args: &[ContractValue],
     ) -> Result<(Option<ContractValue>, NodeUpdates<ContractValue>), TransactionError> {
         let contract = self
@@ -201,14 +202,14 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
             .map_err(|_| TransactionError::Rejected("Contract not found".into()))?;
         contract
             .exec(func_name, args, &self.storage, root)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn execute_contract_updates(
         &self,
         contract: u64,
         root: u64,
-        func_name: &String,
+        func_name: &str,
         args: &[ContractValue],
         updates: NodeUpdates<ContractValue>,
     ) -> Result<(Option<ContractValue>, NodeUpdates<ContractValue>), TransactionError> {
@@ -218,7 +219,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
             .map_err(|_| TransactionError::Rejected("Contract not found".into()))?;
         contract
             .exec_with_updates(func_name, args, &self.storage, root, updates)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     /// inserts the new transaction into the list
@@ -273,7 +274,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
     ) -> Result<(), BlockDAGError> {
         self.storage
             .commit_set(updates)
-            .map_err(|err| BlockDAGError::MapError(err))
+            .map_err(BlockDAGError::MapError)
     }
 
     /// Add a confirmed milestone to the list of milestones
@@ -462,7 +463,7 @@ impl<M: ContractStateStorage, T: TransactionStorage, C: ContractStorage> BlockDA
     }
 }
 
-impl<M: ContractStateStorage, T: TransactionStorage> BlockDAG<M, T, HashMap<u64, Contract>> {
+impl<M: ContractStateStorage, T: TransactionStorage, S: BuildHasher> BlockDAG<M, T, HashMap<u64, Contract, S>> {
     // Get the hash id's of all the contracts stored on the dag
     pub fn get_contracts(&self) -> Vec<u64> {
         self.contracts.keys().cloned().collect()

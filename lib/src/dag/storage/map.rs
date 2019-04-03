@@ -1,6 +1,6 @@
 use std::cmp::Eq;
 use std::collections::HashMap;
-use std::hash::Hash;
+use std::hash::{Hash, BuildHasher};
 
 use std::borrow::Borrow;
 use std::error::Error;
@@ -31,7 +31,7 @@ pub trait Map<K: Eq + Hash, V> {
     fn set(&mut self, k: K, v: V) -> MapResult<()>;
 }
 
-impl<K: Eq + Hash, V> Map<K, V> for HashMap<K, V> {
+impl<K: Eq + Hash, V, S: BuildHasher> Map<K, V> for HashMap<K, V, S> {
     fn get<'a>(&'a self, k: &K) -> MapResult<OOB<'a, V>> {
         HashMap::get(self, k).map_or(Err(MapError::NotFound), |v| Ok(OOB::Borrowed(v)))
     }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 use std::marker::{Send, Sync};
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -43,7 +44,8 @@ impl<
 impl<
         M: 'static + ContractStateStorage + Send + Sync,
         T: 'static + TransactionStorage + Send + Sync,
-    > GenericDAGManager<M, T, HashMap<u64, Contract>>
+        S: 'static + BuildHasher + Send + Sync
+    > GenericDAGManager<M, T, HashMap<u64, Contract, S>>
 {
     pub fn get_tips(&self) -> TransactionHashes {
         self.dag.read().unwrap().get_tips()

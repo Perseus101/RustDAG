@@ -115,11 +115,11 @@ impl Server {
         let trunk_updates = self.blockdag.try_add_transaction(&trunk)?;
         let trunk_root = trunk_updates
             .get_storage_root()
-            .unwrap_or(trunk.get_merge_root());
+            .unwrap_or_else(|| trunk.get_merge_root());
         let branch_updates = self.blockdag.try_add_transaction(&branch)?;
         let branch_root = branch_updates
             .get_storage_root()
-            .unwrap_or(branch.get_merge_root());
+            .unwrap_or_else(|| branch.get_merge_root());
 
         if let Some(updates) = trunk_updates.get_node_updates() {
             self.blockdag.add_note_updates(updates)?;
@@ -155,13 +155,11 @@ impl Server {
         let mut branch = self.peer.get_transaction(tip_hashes.branch_hash)?;
         let merge_header: MergeHeader;
         loop {
-            match self.try_find_root(&trunk, &branch) {
-                Ok(header) => {
-                    merge_header = header;
-                    break;
-                }
-                Err(_) => {}
+            if let Ok(header) = self.try_find_root(&trunk, &branch) {
+                merge_header = header;
+                break;
             }
+
             tip_hashes = self.peer.get_tips();
             trunk = self.peer.get_transaction(tip_hashes.trunk_hash)?;
             branch = self.peer.get_transaction(tip_hashes.branch_hash)?;

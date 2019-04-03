@@ -12,6 +12,7 @@ pub struct TransactionHeader {
 }
 
 impl TransactionHeader {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         branch_transaction: u64,
         trunk_transaction: u64,
